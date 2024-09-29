@@ -1,5 +1,5 @@
 # PowerShell
-PowerShell scripts that I'm working/worked on.
+PowerShell scripts working/worked on.
 
 File - Description
 
