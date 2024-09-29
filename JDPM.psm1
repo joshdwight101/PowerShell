@@ -3,7 +3,7 @@
 # Revision Date: 08/28/2024
 #
 # Commands:
-# Install-Printer -PrinterName <name> -PrinterIP <ip> -DriverName <name> -InfPath <path.inf> -Duplex [0,1,2]
+# Install-Printer -PrinterName <name> -PrinterIP <ip> -DriverName <name> -InfPath <path.inf> -Duplex <0,1,2>
 # Duplex Options Explained:
 # 0 = Off/Single-Sided; 1 = TwoSidedShortEdge; 2 = TwoSidedLongEdge
 #
