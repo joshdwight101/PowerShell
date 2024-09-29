@@ -52,7 +52,7 @@ function Install-Printer {
         [Parameter(Mandatory=$true)]
         [string]$InfPath,
         [Parameter(Mandatory=$false)]
-        [string]$Duplex    # 0 = Off/Single-Sided; 1 = TwoSidedShortEdge; 2 = TwoSidedLongEdge
+        [int]$Duplex    # 0 = Off/Single-Sided; 1 = TwoSidedShortEdge; 2 = TwoSidedLongEdge
     )
 
     # driver handling
@@ -90,17 +90,20 @@ function Install-Printer {
         if (-not $printer_port.exists) {
             Add-PrinterPort -Name $printer_port.name -PrinterHostAddress $my_printer.ip
         }
-        if(-not $Duplex){
-            $duplex_mode = "OneSided"
-        } elseif ($Duplex -eq 0) {
-            $duplex_mode = "OneSided"
-        } elseif ($Duplex -eq 1) {
-            $duplex_mode = "TwoSidedShortEdge"
-        } elseif ($Duplex -eq 2) {
-            $duplex_mode = "TwoSidedLongEdge"
-        } else { 
-            $duplex_mode = "OneSided"
-        }
+        # Assuming $Duplex is passed as an integer parameter
+	if (-not $Duplex -and $Duplex -ne 0) {
+	    $duplex_mode = "OneSided"
+	} else {
+	    switch ($Duplex) {
+		0 { $duplex_mode = "OneSided" }
+		1 { $duplex_mode = "TwoSidedShortEdge" }
+		2 { $duplex_mode = "TwoSidedLongEdge" }
+		default { $duplex_mode = "OneSided" }
+	    }
+	}
+
+	Write-Host "Duplex mode is: $duplex_mode"
+        
         Add-Printer -Name $my_printer.name -DriverName $printer_driver.name -PortName $printer_port.name #-ShareName $my_printer.name  # I think this shares the printer
         Get-Printer -Name $my_printer.name | Set-PrintConfiguration -DuplexingMode $duplex_mode
 
