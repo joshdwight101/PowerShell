@@ -11,3 +11,4 @@ DirectorySign.ps1 - DirectorySign opens up a simple gui where you can enter a pa
 
 Get-Monitor-Information.ps1 - This script is a simple script that attempts to obtain information about the display monitors that are hooked up to a workstation. By default it outputs to C:\Temp, but the variables are at the top of the script for easy editing.
 
+RandomStringGenerator.ps1 - RandomStringGenerator is a simple powershell gui with a slider that allows you to generate a random string of a specified length. Each time you press the button it copies a new randomly generated string into the clipboard to be pasted wherever.
