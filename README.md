@@ -1,5 +1,5 @@
 # PowerShell
-Place where I'll upload PowerShell scripts that I'm working/worked on.
+PowerShell scripts that I'm working/worked on.
 
 File - Description
 
