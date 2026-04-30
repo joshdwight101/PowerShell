@@ -56,7 +56,6 @@ SecureVault-Encryptor.ps1 - A full GUI-oriented encryption application built in 
 - AES-256-CBC encryption + HMAC-SHA256 authentication (compatible with Windows PowerShell 5.1+)
 - Optional certificate-backed key protection using RSA-OAEP (compatibility mode for older PowerShell/.NET hosts)
 - Optional password-based encryption mode using PBKDF2 (high iteration count)
-- Clear mode validation (`Decrypt` requires `.psenc`) and deterministic key-source behavior (certificate mode takes precedence when selected)
 - Output files are written in-place in the same directory as source files (`.psenc` for encrypt, restored/`.decrypted` for decrypt)
 - Reliable background job processing with worker recommendations based on available cores
 - Auto-manage thread recommendation based on live CPU utilization to reduce overcommitting busy systems

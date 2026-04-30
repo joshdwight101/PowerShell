@@ -604,7 +604,6 @@ SecureVault Help Index
    - Optional when a certificate is selected.
    - Required if certificate is [None].
    - Used to derive encryption/authentication keys.
-   - If a certificate is selected, password is ignored for that run.
 
 6) Certificate
    - Optional when password is provided.
@@ -739,9 +738,6 @@ It supports:
             if (-not $files -or $files.Count -eq 0) { throw 'No matching files found.' }
 
             $selectedCert = if ($certCombo.SelectedIndex -gt 0) { $script:certMap[$certCombo.SelectedItem] } else { $null }
-            if (($modeCombo.SelectedItem -eq 'Decrypt') -and ($files | Where-Object { $_ -notlike '*.psenc' }).Count -gt 0) {
-                throw 'Decrypt mode requires .psenc input files. Select an encrypted file or folder containing .psenc files.'
-            }
             if (-not $selectedCert -and [string]::IsNullOrWhiteSpace($passwordText.Text)) {
                 throw 'Provide either a password or a certificate.'
             }
@@ -762,17 +758,8 @@ It supports:
             }
             & $appendLog "Processing $($files.Count) file(s) in $($modeCombo.SelectedItem) mode."
 
-            $certBlob = $null
-            $password = $null
-            if ($selectedCert) {
-                $certBlob = [Convert]::ToBase64String($selectedCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx))
-                if (-not [string]::IsNullOrWhiteSpace($passwordText.Text)) {
-                    & $appendLog 'Certificate selected: password input will be ignored for this run.'
-                }
-            }
-            else {
-                $password = $passwordText.Text
-            }
+            $certBlob = if ($selectedCert) { [Convert]::ToBase64String($selectedCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)) } else { $null }
+            $password = $passwordText.Text
 
             [System.Threading.Tasks.Task]::Factory.StartNew([Action]{
                 try {
