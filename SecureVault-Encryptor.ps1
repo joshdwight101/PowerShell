@@ -21,7 +21,6 @@ $script:logRoot = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Pat
 $script:cancelSource = $null
 $script:lastOperation = $null
 $script:isRunning = $false
-$script:cancelRequested = $false
 
 function Initialize-CryptoAssembly {
     Add-Type -Language CSharp -TypeDefinition @"
@@ -605,7 +604,6 @@ SecureVault Help Index
    - Optional when a certificate is selected.
    - Required if certificate is [None].
    - Used to derive encryption/authentication keys.
-   - If a certificate is selected, password is ignored for that run.
 
 6) Certificate
    - Optional when password is provided.
@@ -720,7 +718,6 @@ It supports:
     $cancelBtn.Add_Click({
         if ($script:cancelSource) {
             $script:cancelSource.Cancel()
-            $script:cancelRequested = $true
             $script:isRunning = $false
             $startBtn.Enabled = $true
             $cancelBtn.Enabled = $false
@@ -741,9 +738,6 @@ It supports:
             if (-not $files -or $files.Count -eq 0) { throw 'No matching files found.' }
 
             $selectedCert = if ($certCombo.SelectedIndex -gt 0) { $script:certMap[$certCombo.SelectedItem] } else { $null }
-            if (($modeCombo.SelectedItem -eq 'Decrypt') -and ($files | Where-Object { $_ -notlike '*.psenc' }).Count -gt 0) {
-                throw 'Decrypt mode requires .psenc input files. Select an encrypted file or folder containing .psenc files.'
-            }
             if (-not $selectedCert -and [string]::IsNullOrWhiteSpace($passwordText.Text)) {
                 throw 'Provide either a password or a certificate.'
             }
@@ -755,7 +749,6 @@ It supports:
             $startBtn.Enabled = $false
             $cancelBtn.Enabled = $true
             $script:isRunning = $true
-            $script:cancelRequested = $false
             $script:cancelSource = [System.Threading.CancellationTokenSource]::new()
             $script:debugLogPath = New-DebugLogPath -Prefix 'SecureVault-Debug'
             $debugEnabled = $debugModeCheck.Checked
@@ -764,67 +757,67 @@ It supports:
                 & $appendLog "Debug mode enabled. Event log: $script:debugLogPath"
             }
             & $appendLog "Processing $($files.Count) file(s) in $($modeCombo.SelectedItem) mode."
-            if ($debugEnabled) {
-                & $appendLog ("DEBUG environment => PS {0} | CLR {1} | OS {2}" -f $PSVersionTable.PSVersion, [Environment]::Version, [Environment]::OSVersion.VersionString)
-            }
 
-            $certBlob = $null
-            $password = $null
-            if ($selectedCert) {
-                $certBlob = [Convert]::ToBase64String($selectedCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx))
-                if (-not [string]::IsNullOrWhiteSpace($passwordText.Text)) {
-                    & $appendLog 'Certificate selected: password input will be ignored for this run.'
-                }
-            }
-            else {
-                $password = $passwordText.Text
-            }
-            if ($debugEnabled) {
-                & $appendLog ("DEBUG key mode => CertMode={0} | PasswordMode={1}" -f [bool]$selectedCert, [bool](-not [string]::IsNullOrWhiteSpace($password)))
-            }
+            $certBlob = if ($selectedCert) { [Convert]::ToBase64String($selectedCert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx)) } else { $null }
+            $password = $passwordText.Text
 
-            $processed = 0
-            foreach ($file in $files) {
-                [System.Windows.Forms.Application]::DoEvents()
-                if ($script:cancelRequested -or ($script:cancelSource -and $script:cancelSource.IsCancellationRequested)) {
-                    & $appendLog 'Operation cancelled by user.'
-                    break
-                }
-                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            [System.Threading.Tasks.Task]::Factory.StartNew([Action]{
                 try {
-                    if ($debugEnabled) { & $appendLog "DEBUG start: $file" }
-                    if ($isEncrypt) {
-                        $out = Join-Path (Split-Path -Path $file -Parent) ("{0}.psenc" -f (Split-Path -Path $file -Leaf))
-                        [FastCryptoEngine]::EncryptFile($file, $out, $password, $certBlob)
+                    $counter = [hashtable]::Synchronized(@{ Done = 0 })
+                    foreach ($file in $files) {
+                        if ($script:cancelSource.IsCancellationRequested) {
+                            $form.BeginInvoke([Action]{ & $appendLog 'Operation cancelled by user.' }) | Out-Null
+                            break
+                        }
+                        try {
+                            if ($debugEnabled) {
+                                $form.BeginInvoke([Action]{ & $appendLog "DEBUG start: $file" }) | Out-Null
+                            }
+                            if ($isEncrypt) {
+                                $out = Join-Path (Split-Path -Path $file -Parent) ("{0}.psenc" -f (Split-Path -Path $file -Leaf))
+                                [FastCryptoEngine]::EncryptFile($file, $out, $password, $certBlob)
+                            }
+                            else {
+                                $parent = Split-Path -Path $file -Parent
+                                $leaf = Split-Path -Path $file -Leaf
+                                $out = if ($leaf.EndsWith('.psenc')) {
+                                    Join-Path $parent $leaf.Substring(0, $leaf.Length - 6)
+                                }
+                                else {
+                                    Join-Path $parent ("{0}.decrypted" -f $leaf)
+                                }
+                                [FastCryptoEngine]::DecryptFile($file, $out, $password, $certBlob)
+                            }
+                            if ($debugEnabled) {
+                                $form.BeginInvoke([Action]{ & $appendLog "DEBUG done: $file" }) | Out-Null
+                            }
+                            $msg = "OK: $file"
+                        }
+                        catch {
+                            $msg = "FAIL: $file -> $($_.Exception.Message)"
+                        }
+
+                        [System.Threading.Interlocked]::Increment([ref]$counter.Done) | Out-Null
+                        $form.BeginInvoke([Action]{
+                            $progress.Value = [Math]::Min($progress.Maximum, [int]$counter.Done)
+                            & $appendLog $msg
+                        }) | Out-Null
                     }
-                    else {
-                        $parent = Split-Path -Path $file -Parent
-                        $leaf = Split-Path -Path $file -Leaf
-                        $out = if ($leaf.EndsWith('.psenc')) { Join-Path $parent $leaf.Substring(0, $leaf.Length - 6) } else { Join-Path $parent ("{0}.decrypted" -f $leaf) }
-                        [FastCryptoEngine]::DecryptFile($file, $out, $password, $certBlob)
-                    }
-                    $sw.Stop()
-                    if ($debugEnabled) { & $appendLog ("DEBUG done: {0} in {1} ms" -f $file, $sw.ElapsedMilliseconds) }
-                    $msg = "OK: $file"
+
+                    $form.BeginInvoke([Action]{ & $appendLog 'Operation complete.' }) | Out-Null
                 }
                 catch {
-                    $sw.Stop()
-                    $ex = $_.Exception
-                    $msg = "FAIL: $file -> $($ex.Message)"
-                    if ($debugEnabled) {
-                        & $appendLog ("DEBUG exception type: {0}" -f $ex.GetType().FullName)
-                        if ($ex.InnerException) { & $appendLog ("DEBUG inner: {0}" -f $ex.InnerException.Message) }
-                        & $appendLog ("DEBUG stack: {0}" -f $ex.StackTrace)
-                    }
+                    $err = $_.Exception.Message
+                    $form.BeginInvoke([Action]{ & $appendLog "Background job failed: $err" }) | Out-Null
                 }
-                $processed++
-                $progress.Value = [Math]::Min($progress.Maximum, $processed)
-                & $appendLog $msg
-            }
-            & $appendLog 'Operation complete.'
-            $script:isRunning = $false
-            $startBtn.Enabled = $true
-            $cancelBtn.Enabled = $false
+                finally {
+                    $form.BeginInvoke([Action]{
+                        $script:isRunning = $false
+                        $startBtn.Enabled = $true
+                        $cancelBtn.Enabled = $false
+                    }) | Out-Null
+                }
+            }, [System.Threading.CancellationToken]::None, [System.Threading.Tasks.TaskCreationOptions]::LongRunning, [System.Threading.Tasks.TaskScheduler]::Default) | Out-Null
         }
         catch {
             & $appendLog "Cannot start operation: $($_.Exception.Message)"
