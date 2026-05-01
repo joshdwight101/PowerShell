@@ -49,3 +49,16 @@ If you want to run the C# GUI as a .NET 8 single-file app:
 1. Create a WinForms project.
 2. Replace `Program.cs` with `IntegrityCheckGui.cs` content.
 3. Build and run on Windows.
+
+
+## Build portable standalone EXE (GUI)
+From `SystemIntegritySuite` folder on Windows with .NET 8 SDK installed:
+
+```powershell
+dotnet publish .\IntegrityCheckGui.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+```
+
+Output EXE:
+`bin\Release\net8.0-windows\win-x64\publish\IntegrityCheckGui.exe`
+
+This publish profile creates a self-contained single-file executable (portable, no separate .NET runtime install required).
