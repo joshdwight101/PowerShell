@@ -8,6 +8,12 @@
 ## v1.5.1
 - Fixed standalone publish build error (`CS0019`) by changing OS build type from `string` to `int`.
 
+## v1.5.2
+- Refined GUI layout to a professional docked structure using `TableLayoutPanel` + `SplitContainer`.
+- Moved menu bar to standard top-of-window placement.
+- Fixed clipping/cutoff issues by improving docking, row sizing, and minimum form size.
+- Improved readability of check results with wrapped details and auto-sized grid rows.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

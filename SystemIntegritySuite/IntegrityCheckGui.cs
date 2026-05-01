@@ -44,6 +44,7 @@ internal sealed class MainForm : Form
         Text = $"{appName} v{version} | Author: {author}";
         Width = 1400;
         Height = 900;
+        MinimumSize = new Size(1200, 800);
         Font = new Font("Segoe UI", 12);
 
         var menu = new MenuStrip();
@@ -59,17 +60,21 @@ internal sealed class MainForm : Form
         menu.Items.Add(helpMenu);
         MainMenuStrip = menu;
 
-        _summary = new Label { Dock = DockStyle.Top, Height = 36, Text = "Ready", Font = new Font("Segoe UI", 12, FontStyle.Bold) };
-        _meta = new Label { Dock = DockStyle.Top, Height = 120, Text = SystemMetadata.BuildSummary(), AutoSize = false };
-        _progress = new ProgressBar { Dock = DockStyle.Top, Height = 24 };
+        _summary = new Label { Dock = DockStyle.Fill, Height = 36, Text = "Ready", Font = new Font("Segoe UI", 12, FontStyle.Bold), Padding = new Padding(8, 4, 8, 4) };
+        _meta = new Label { Dock = DockStyle.Fill, Height = 70, Text = SystemMetadata.BuildSummary(), AutoSize = false, Padding = new Padding(8, 2, 8, 2) };
+        _progress = new ProgressBar { Dock = DockStyle.Fill, Height = 24 };
 
-        _grid = new DataGridView { Dock = DockStyle.Top, Height = 320, ReadOnly = true, AllowUserToAddRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
+        _grid = new DataGridView { Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
         _grid.Columns.Add("Step", "Step");
         _grid.Columns.Add("Status", "Status");
         _grid.Columns.Add("Duration", "Duration (s)");
         _grid.Columns.Add("Details", "Details");
+        _grid.RowHeadersVisible = false;
+        _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+        _grid.DefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        _grid.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.AllCells;
 
-        var panel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 48 };
+        var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, Height = 54, Padding = new Padding(6), WrapContents = false };
         _runBtn = new Button { Text = "Run Integrity Check", Width = 220, Height = 40 };
         _repairBtn = new Button { Text = "Attempt Repairs + Recheck", Width = 270, Height = 40, Enabled = false };
         _resetWindowsBtn = new Button { Text = "Open Reset Windows", Width = 220, Height = 40 };
@@ -84,13 +89,25 @@ internal sealed class MainForm : Form
 
         _log = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 12) };
 
-        Controls.Add(menu);
-        Controls.Add(_log);
-        Controls.Add(panel);
-        Controls.Add(_grid);
-        Controls.Add(_progress);
-        Controls.Add(_meta);
-        Controls.Add(_summary);
+        var split = new SplitContainer { Dock = DockStyle.Fill, Orientation = Orientation.Horizontal, SplitterDistance = 420 };
+        split.Panel1.Controls.Add(_grid);
+        split.Panel2.Controls.Add(_log);
+
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6 };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, menu.Height + 2));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 76));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        root.Controls.Add(menu, 0, 0);
+        root.Controls.Add(_summary, 0, 1);
+        root.Controls.Add(_meta, 0, 2);
+        root.Controls.Add(_progress, 0, 3);
+        root.Controls.Add(split, 0, 4);
+        root.Controls.Add(panel, 0, 5);
+
+        Controls.Add(root);
     }
 
     private static void ShowAbout(string appName, string version, string author)
