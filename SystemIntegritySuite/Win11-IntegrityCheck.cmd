@@ -28,6 +28,24 @@ if not defined IP set "IP=Unavailable"
 call :log "IPv4: %IP%"
 call :log "------------------------------------"
 
+call :check_pending_reboot
+if "%PENDING_REBOOT%"=="1" (
+  call :log "PENDING REBOOT DETECTED."
+  if "%SILENT%"=="1" (
+    call :log "Silent mode: restarting immediately with force flag."
+    shutdown /r /f /t 0
+    exit /b 0
+  )
+  choice /C YN /N /M "Pending reboot detected. Restart now? [Y/N]: "
+  if errorlevel 2 (
+    call :log "User declined immediate restart; continuing checks."
+  ) else (
+    call :log "User approved restart. Restarting with force flag."
+    shutdown /r /f /t 0
+    exit /b 0
+  )
+)
+
 call :log "[1/7] Checking OS Build..."
 for /f "tokens=3" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuild ^| find "CurrentBuild"') do set BUILD=%%A
 if %BUILD% LSS 22000 (
@@ -122,4 +140,12 @@ exit /b 0
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm:ss.fff\""') do set "TS=%%T"
 >> "%REPORT%" echo [!TS!] %~1
 if "%SILENT%"=="0" echo [!TS!] %~1
+exit /b 0
+
+
+:check_pending_reboot
+set "PENDING_REBOOT=0"
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending" >nul 2>&1 && set "PENDING_REBOOT=1"
+reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired" >nul 2>&1 && set "PENDING_REBOOT=1"
+reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager" /v PendingFileRenameOperations >nul 2>&1 && set "PENDING_REBOOT=1"
 exit /b 0

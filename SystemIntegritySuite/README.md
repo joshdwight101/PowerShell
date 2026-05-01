@@ -62,3 +62,15 @@ Output EXE:
 `bin\Release\net8.0-windows\win-x64\publish\IntegrityCheckGui.exe`
 
 This publish profile creates a self-contained single-file executable (portable, no separate .NET runtime install required).
+
+
+## Pending reboot behavior
+- GUI: checks pending reboot first and prompts user to restart immediately. If approved, it runs `shutdown /r /f /t 0`.
+- PowerShell/CMD: checks pending reboot before checks.
+  - Interactive mode: prompts user to restart now.
+  - Silent mode: restarts automatically with force flag.
+
+## GUI repair + recheck flow
+The GUI now includes **Attempt Repair + Recheck**:
+- Runs repair actions for common failures (SFC scan/repair, DISM restore health, Windows Update service reset).
+- Automatically reruns full checks after repair attempts to verify whether problems persist.

@@ -32,6 +32,17 @@ function Add-Log {
     if (-not $Silent) { Write-Host $line }
 }
 
+
+function Test-PendingReboot {
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
+    )
+    foreach ($path in $paths) { if (Test-Path $path) { return $true } }
+    $sessionManager = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -ErrorAction SilentlyContinue
+    return $null -ne $sessionManager.PendingFileRenameOperations
+}
+
 function Add-Result {
     param([string]$Message,[int]$Points=0)
     $script:score += $Points
@@ -50,6 +61,22 @@ Add-Log "Hostname: $hostname"
 Add-Log "User: $user"
 Add-Log "IPv4: $($ips -join ', ')"
 Add-Log '------------------------------------'
+
+if (Test-PendingReboot) {
+    Add-Log 'PENDING REBOOT DETECTED.'
+    if ($Silent) {
+        Add-Log 'Silent mode: restarting immediately with force flag.'
+        shutdown.exe /r /f /t 0 | Out-Null
+        exit 0
+    }
+    $choice = Read-Host 'A pending reboot is detected. Restart now? (Y/N)'
+    if ($choice -match '^(Y|y)$') {
+        Add-Log 'User approved restart. Restarting with force flag.'
+        shutdown.exe /r /f /t 0 | Out-Null
+        exit 0
+    }
+    Add-Log 'User declined immediate restart; continuing checks.'
+}
 
 Add-Log '[1/7] Checking OS Build...'
 $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuild
