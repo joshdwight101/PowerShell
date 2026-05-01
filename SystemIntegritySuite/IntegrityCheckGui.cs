@@ -1,292 +1,325 @@
-﻿#if WINDOWS
-using System.Drawing;
-using System.Windows.Forms;
+#if WINDOWS
 using System.Diagnostics;
+using System.Drawing;
 using System.Management;
-using System.Text;
 using System.Runtime.Versioning;
+using System.Text;
+using Microsoft.Win32;
+using System.Windows.Forms;
 
 namespace IntegrityCheckGui;
 
 [SupportedOSPlatform("windows")]
 internal static class Program
 {
+    private const string Version = "1.4.0";
+    private const string Author = "JD";
+
     [STAThread]
     private static void Main()
     {
         AppLog.Initialize(Environment.GetCommandLineArgs().Any(a => a.Equals("--debug", StringComparison.OrdinalIgnoreCase)));
-        AppLog.Log("Application start.");
         ApplicationConfiguration.Initialize();
-        Application.ThreadException += (_, e) => AppLog.Log($"UI thread exception: {e.Exception}");
-        AppDomain.CurrentDomain.UnhandledException += (_, e) => AppLog.Log($"Unhandled exception: {e.ExceptionObject}");
-        Application.Run(new MainForm());
+        Application.Run(new MainForm(Version, Author));
     }
 }
 
+[SupportedOSPlatform("windows")]
 internal sealed class MainForm : Form
 {
-    private readonly Label _header;
-    private readonly RichTextBox _output;
-    private readonly Button _runButton;
-    private readonly Button _repairButton;
-    private CheckResult[] _lastResults = Array.Empty<CheckResult>();
+    private readonly Label _summary;
+    private readonly Label _meta;
+    private readonly ProgressBar _progress;
+    private readonly DataGridView _grid;
+    private readonly RichTextBox _log;
+    private readonly Button _runBtn;
+    private readonly Button _repairBtn;
+    private readonly Button _resetWindowsBtn;
+    private readonly Button _restartBtn;
+    private List<CheckResult> _last = new();
 
-    public MainForm()
+    public MainForm(string version, string author)
     {
-        Text = "Windows 11 Integrity Check";
-        Width = 1100;
-        Height = 760;
+        Text = $"Win11 Integrity Checking & Repair Tool v{version} | {author}";
+        Width = 1400;
+        Height = 900;
+        Font = new Font("Segoe UI", 12);
 
-        _header = new Label { Dock = DockStyle.Top, Height = 30, Text = "Ready.", TextAlign = ContentAlignment.MiddleLeft };
-        _runButton = new Button { Dock = DockStyle.Top, Height = 35, Text = "Run Integrity Check" };
-        _repairButton = new Button { Dock = DockStyle.Top, Height = 35, Text = "Attempt Repair + Recheck", Enabled = false };
+        _summary = new Label { Dock = DockStyle.Top, Height = 36, Text = "Ready", Font = new Font("Segoe UI", 12, FontStyle.Bold) };
+        _meta = new Label { Dock = DockStyle.Top, Height = 120, Text = SystemMetadata.BuildSummary(), AutoSize = false };
+        _progress = new ProgressBar { Dock = DockStyle.Top, Height = 24 };
 
-        _runButton.Click += async (_, _) => await RunChecksAsync(false);
-        _repairButton.Click += async (_, _) => await AttemptRepairAndRecheckAsync();
+        _grid = new DataGridView { Dock = DockStyle.Top, Height = 320, ReadOnly = true, AllowUserToAddRows = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill };
+        _grid.Columns.Add("Step", "Step");
+        _grid.Columns.Add("Status", "Status");
+        _grid.Columns.Add("Duration", "Duration (s)");
+        _grid.Columns.Add("Details", "Details");
 
-        _output = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 10) };
+        var panel = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 48 };
+        _runBtn = new Button { Text = "Run Integrity Check", Width = 220, Height = 40 };
+        _repairBtn = new Button { Text = "Attempt Repairs + Recheck", Width = 270, Height = 40, Enabled = false };
+        _resetWindowsBtn = new Button { Text = "Open Reset Windows", Width = 220, Height = 40 };
+        _restartBtn = new Button { Text = "Restart Computer", Width = 180, Height = 40 };
 
-        Controls.Add(_output);
-        Controls.Add(_repairButton);
-        Controls.Add(_runButton);
-        Controls.Add(_header);
+        _runBtn.Click += async (_, _) => await RunChecksAsync();
+        _repairBtn.Click += async (_, _) => await AttemptRepairAndRecheckAsync();
+        _resetWindowsBtn.Click += (_, _) => Process.Start(new ProcessStartInfo("ms-settings:recovery") { UseShellExecute = true });
+        _restartBtn.Click += (_, _) => Process.Start(new ProcessStartInfo("shutdown", "/r /t 0") { UseShellExecute = false, CreateNoWindow = true });
+
+        panel.Controls.AddRange(new Control[] { _runBtn, _repairBtn, _resetWindowsBtn, _restartBtn });
+
+        _log = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 12) };
+
+        Controls.Add(_log);
+        Controls.Add(panel);
+        Controls.Add(_grid);
+        Controls.Add(_progress);
+        Controls.Add(_meta);
+        Controls.Add(_summary);
     }
 
-    private async Task RunChecksAsync(bool append)
+    private async Task RunChecksAsync()
     {
-        AppLog.Log($"RunChecksAsync started. append={append}");
-        _runButton.Enabled = false;
-        _repairButton.Enabled = false;
-        if (!append) _output.Clear();
+        _runBtn.Enabled = false;
+        _repairBtn.Enabled = false;
+        _grid.Rows.Clear();
+        _log.Clear();
 
-        if (PendingRebootHelper.IsPendingReboot())
+        var checks = CheckCatalog.BuildChecks();
+        _progress.Value = 0;
+        _progress.Maximum = checks.Count;
+        _summary.Text = "Running integrity workflow...";
+
+        _last = new List<CheckResult>();
+        foreach (var check in checks)
         {
-            var prompt = MessageBox.Show("A pending reboot is detected. Restart now?", "Pending Reboot", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-            if (prompt == DialogResult.Yes)
-            {
-                AppLog.Log("Pending reboot approved by user.");
-                Process.Start(new ProcessStartInfo("shutdown", "/r /f /t 0") { UseShellExecute = false, CreateNoWindow = true });
-                return;
-            }
-            AppLog.Log("Pending reboot declined by user.");
+            var row = _grid.Rows.Add(check.Name, "Running", "", "Executing...");
+            SetStatusColor(row, "Running");
+            WriteLog($"START: {check.Name} | {check.Description}");
+
+            var result = await Task.Run(check.Action);
+            _last.Add(result);
+
+            _grid.Rows[row].Cells[1].Value = result.Status;
+            _grid.Rows[row].Cells[2].Value = result.Seconds.ToString("F1");
+            _grid.Rows[row].Cells[3].Value = result.Details;
+            SetStatusColor(row, result.Status);
+
+            WriteLog($"END: {result.Name} => {result.Status} ({result.Seconds:F1}s) :: {result.Details}");
+            _progress.Value += 1;
         }
 
-        _header.Text = "Running checks...";
-        var checks = CheckCatalog.BuildChecks();
-        var tasks = checks.Select(check => Task.Run(check)).ToArray();
-        _lastResults = await Task.WhenAll(tasks);
-        AppLog.Log($"Checks completed. Result count: {_lastResults.Length}");
+        // Pending reboot check is intentionally done after full integrity checks.
+        var pending = PendingRebootInspector.Inspect();
+        var pendingRow = _grid.Rows.Add("Pending Reboot Status", pending.IsPending ? "FAIL" : "PASS", "0.0", pending.Summary);
+        SetStatusColor(pendingRow, pending.IsPending ? "FAIL" : "PASS");
+        WriteLog($"PENDING-REBOOT: {pending.Summary}");
 
-        foreach (var result in _lastResults) AppendResult(result);
+        var overall = DecisionEngine.Overall(_last, pending.IsPending);
+        _summary.Text = $"Completed: {overall}";
+        WriteLog($"OVERALL: {overall}");
 
-        var overall = AssessOverall(_lastResults);
-        _header.Text = $"Completed. Overall: {overall}";
-        _output.AppendText($"{Environment.NewLine}Overall Assessment: {overall}{Environment.NewLine}");
+        if (pending.IsPending)
+        {
+            var prompt = MessageBox.Show("Pending reboot detected after checks. Restart now?", "Pending Reboot", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (prompt == DialogResult.Yes)
+            {
+                Process.Start(new ProcessStartInfo("shutdown", "/r /t 0") { UseShellExecute = false, CreateNoWindow = true });
+            }
+        }
 
-        _runButton.Enabled = true;
-        _repairButton.Enabled = _lastResults.Any(r => r.Status is "Fail" or "Critical" or "Warning");
+        _repairBtn.Enabled = _last.Any(r => r.Status is "FAIL" or "WARNING");
+        _runBtn.Enabled = true;
     }
 
     private async Task AttemptRepairAndRecheckAsync()
     {
-        AppLog.Log("AttemptRepairAndRecheckAsync started.");
-        _runButton.Enabled = false;
-        _repairButton.Enabled = false;
-        _output.AppendText($"{Environment.NewLine}--- Attempting repairs ---{Environment.NewLine}");
-
-        var failed = _lastResults.Where(r => r.Status is "Fail" or "Critical" or "Warning").Select(r => r.Name).ToHashSet();
-        if (failed.Contains("SFC Verify")) AppendRepairResult(RepairAction("SFC Repair", "sfc", "/scannow"));
-        if (failed.Contains("DISM CheckHealth")) AppendRepairResult(RepairAction("DISM Repair", "DISM", "/Online /Cleanup-Image /RestoreHealth"));
-        if (failed.Contains("Windows Update Health")) AppendRepairResult(RepairAction("Reset Windows Update Services", "cmd", "/c net stop wuauserv && net start wuauserv"));
-
-        _output.AppendText($"{Environment.NewLine}--- Rechecking integrity ---{Environment.NewLine}");
-        await RunChecksAsync(true);
+        WriteLog("--- Repair Attempt Phase ---");
+        var repairs = RepairCatalog.BuildRepairs(_last);
+        foreach (var repair in repairs)
+        {
+            WriteLog($"REPAIR START: {repair.Name}");
+            var rr = await Task.Run(repair.Action);
+            WriteLog($"REPAIR END: {rr.Name} => {rr.Status} :: {rr.Details}");
+        }
+        WriteLog("--- Repair attempts complete. Rechecking... ---");
+        await RunChecksAsync();
     }
 
-    private static CheckResult RepairAction(string name, string file, string args)
+    private void SetStatusColor(int row, string status)
     {
-        AppLog.Log($"RepairAction start: {name} => {file} {args}");
-        var sw = Stopwatch.StartNew();
-        var pr = ProcessRunner.Run(file, args);
-        sw.Stop();
-        return pr.ExitCode == 0
-            ? new(name, "Pass", "Repair command completed.", sw.Elapsed.TotalSeconds, "")
-            : new(name, "Warning", $"Repair command may have failed: {pr.Output}", sw.Elapsed.TotalSeconds, "Review command output manually.");
+        var cell = _grid.Rows[row].Cells[1];
+        cell.Style.ForeColor = status switch
+        {
+            "PASS" => Color.DarkGreen,
+            "FAIL" => Color.DarkRed,
+            "WARNING" => Color.DarkOrange,
+            "Running" => Color.DarkBlue,
+            _ => Color.Black
+        };
+        cell.Style.Font = new Font("Segoe UI", 12, FontStyle.Bold);
     }
 
-    private void AppendResult(CheckResult result)
+    private void WriteLog(string line)
     {
-        _output.AppendText($"[{DateTime.Now:HH:mm:ss}] {result.Name} | {result.Status} | {result.Seconds:F1}s{Environment.NewLine}");
-        _output.AppendText($"  {result.Details}{Environment.NewLine}");
-        if (!string.IsNullOrWhiteSpace(result.Recommendation)) _output.AppendText($"  Recommendation: {result.Recommendation}{Environment.NewLine}");
-        _output.AppendText(Environment.NewLine);
+        var msg = $"[{DateTime.Now:HH:mm:ss}] {line}";
+        _log.AppendText(msg + Environment.NewLine);
+        AppLog.Log(msg);
+    }
+}
+
+internal sealed record CheckDefinition(string Name, string Description, Func<CheckResult> Action);
+internal sealed record RepairDefinition(string Name, Func<RepairResult> Action);
+internal sealed record CheckResult(string Name, string Status, string Details, double Seconds, string Recommendation = "");
+internal sealed record RepairResult(string Name, string Status, string Details);
+
+internal static class CheckCatalog
+{
+    public static List<CheckDefinition> BuildChecks() =>
+    [
+        new("OS Build", "Validate Windows 11 baseline build", () => Checkers.OsBuild()),
+        new("SFC Verify", "System file integrity verification", () => Checkers.External("SFC Verify", "sfc", "/verifyonly", "did not find any integrity violations", "found integrity violations")),
+        new("DISM CheckHealth", "Component store health check", () => Checkers.External("DISM CheckHealth", "DISM", "/Online /Cleanup-Image /CheckHealth", "No component store corruption detected", "component store is repairable")),
+        new("Boot Config", "Read current BCD entry", () => Checkers.BootConfig()),
+        new("CHKDSK Scan", "Online file system scan", () => Checkers.External("CHKDSK Scan", "chkdsk", $"{Environment.GetEnvironmentVariable("SystemDrive") ?? "C:"} /scan", "found no problems", "made corrections")),
+        new("CBS Log", "Servicing log availability", () => Checkers.CbsLog()),
+        new("Free Space", "Minimum 20GB free on system drive", () => Checkers.FreeSpace()),
+        new("Windows Update Health", "Windows Update error trend (30 days)", () => Checkers.UpdateHealth())
+    ];
+}
+
+internal static class RepairCatalog
+{
+    public static List<RepairDefinition> BuildRepairs(IEnumerable<CheckResult> results)
+    {
+        var names = results.Where(r => r.Status is "FAIL" or "WARNING").Select(r => r.Name).ToHashSet();
+        var list = new List<RepairDefinition>();
+        if (names.Contains("SFC Verify")) list.Add(new("Run SFC Repair", () => Repairers.Run("SFC Repair", "sfc", "/scannow")));
+        if (names.Contains("DISM CheckHealth")) list.Add(new("Run DISM RestoreHealth", () => Repairers.Run("DISM Repair", "DISM", "/Online /Cleanup-Image /RestoreHealth")));
+        if (names.Contains("Windows Update Health")) list.Add(new("Reset Windows Update Components", Repairers.ResetWindowsUpdate));
+        return list;
+    }
+}
+
+internal static class Checkers
+{
+    public static CheckResult OsBuild() { var sw=Stopwatch.StartNew(); var os = Wmi.QueryOs(); sw.Stop(); return os.Build >= 22000 ? new("OS Build","PASS",$"{os.Caption} {os.DisplayVersion} build {os.Build}.",sw.Elapsed.TotalSeconds) : new("OS Build","FAIL",$"Build {os.Build} is below Windows 11 baseline.",sw.Elapsed.TotalSeconds,"Reinstall/upgrade recommended."); }
+    public static CheckResult BootConfig() => ExternalByExit("Boot Config","bcdedit","/enum {current}","BCD current entry accessible.","Could not read BCD current entry.");
+    public static CheckResult CbsLog(){var sw=Stopwatch.StartNew();var e=File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"Logs","CBS","CBS.log"));sw.Stop();return e?new("CBS Log","PASS","CBS log exists.",sw.Elapsed.TotalSeconds):new("CBS Log","WARNING","CBS log missing.",sw.Elapsed.TotalSeconds,"Investigate servicing state.");}
+    public static CheckResult FreeSpace(){var sw=Stopwatch.StartNew();var d=new DriveInfo(Environment.GetEnvironmentVariable("SystemDrive")??"C:");sw.Stop();return d.AvailableFreeSpace>=20L*1024*1024*1024?new("Free Space","PASS",$"{d.AvailableFreeSpace/(1024*1024*1024)} GB free.",sw.Elapsed.TotalSeconds):new("Free Space","FAIL","Less than 20GB free.",sw.Elapsed.TotalSeconds,"Free disk space.");}
+    public static CheckResult UpdateHealth(){var sw=Stopwatch.StartNew(); var pr=Proc.Run("powershell","-NoProfile -Command \"$e=Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WindowsUpdateClient'; Level=2; StartTime=(Get-Date).AddDays(-30)} -ErrorAction SilentlyContinue; if($e.Count -gt 20){exit 2}else{exit 0}\""); sw.Stop(); return pr.ExitCode==0?new("Windows Update Health","PASS","Update errors within acceptable range.",sw.Elapsed.TotalSeconds):new("Windows Update Health","WARNING","High update error count detected.",sw.Elapsed.TotalSeconds,"Reset Windows Update components.");}
+    public static CheckResult External(string name,string file,string args,string pass,string fail){var sw=Stopwatch.StartNew();var pr=Proc.Run(file,args);sw.Stop();if(pr.Output.Contains(pass,StringComparison.OrdinalIgnoreCase)) return new(name,"PASS","No integrity issue detected.",sw.Elapsed.TotalSeconds);if(pr.Output.Contains(fail,StringComparison.OrdinalIgnoreCase)) return new(name,"FAIL","Integrity issue detected.",sw.Elapsed.TotalSeconds,"Attempt repair.");return new(name,"WARNING",$"Could not conclusively parse output. ExitCode={pr.ExitCode}",sw.Elapsed.TotalSeconds,"Review command output/log.");}
+    private static CheckResult ExternalByExit(string name,string file,string args,string pass,string fail){var sw=Stopwatch.StartNew();var pr=Proc.Run(file,args);sw.Stop();return pr.ExitCode==0?new(name,"PASS",pass,sw.Elapsed.TotalSeconds):new(name,"FAIL",fail,sw.Elapsed.TotalSeconds,"Manual boot repair may be required.");}
+}
+
+internal static class Repairers
+{
+    public static RepairResult Run(string name, string file, string args)
+    {
+        var p = Proc.Run(file, args);
+        return p.ExitCode == 0 ? new(name, "PASS", "Repair command completed.") : new(name, "FAIL", $"Repair command failed. ExitCode={p.ExitCode}");
     }
 
-    private void AppendRepairResult(CheckResult result)
+    public static RepairResult ResetWindowsUpdate()
     {
-        _output.AppendText($"[{DateTime.Now:HH:mm:ss}] {result.Name} | {result.Status}{Environment.NewLine}");
-        _output.AppendText($"  {result.Details}{Environment.NewLine}{Environment.NewLine}");
+        var cmd = "/c net stop wuauserv && net stop bits && net stop cryptsvc && ren %systemroot%\\SoftwareDistribution SoftwareDistribution.bak && ren %systemroot%\\System32\\catroot2 catroot2.bak && net start cryptsvc && net start bits && net start wuauserv";
+        return Run("Reset Windows Update Components", "cmd", cmd);
     }
+}
 
-    private static string AssessOverall(IEnumerable<CheckResult> results)
+internal sealed record ProcResult(int ExitCode, string Output);
+internal static class Proc
+{
+    public static ProcResult Run(string file, string args)
     {
-        if (results.Any(r => r.Status == "Critical")) return "REINSTALL RECOMMENDED";
-        if (results.Any(r => r.Status == "Fail")) return "REPAIR INSTALL RECOMMENDED";
-        if (results.Any(r => r.Status == "Warning")) return "ATTENTION NEEDED";
+        AppLog.Log($"Process: {file} {args}");
+        try
+        {
+            var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            using var p = Process.Start(psi);
+            if (p is null) return new(-1, "Process failed to start");
+            var o = p.StandardOutput.ReadToEnd() + Environment.NewLine + p.StandardError.ReadToEnd();
+            p.WaitForExit();
+            return new(p.ExitCode, o);
+        }
+        catch (Exception ex) { return new(-1, ex.ToString()); }
+    }
+}
+
+internal static class DecisionEngine
+{
+    public static string Overall(IEnumerable<CheckResult> checks, bool pendingReboot)
+    {
+        if (checks.Any(c => c.Status == "FAIL") && pendingReboot) return "REPAIR ATTEMPTS REQUIRED + REBOOT PENDING";
+        if (checks.Any(c => c.Status == "FAIL")) return "REPAIR REQUIRED (REINSTALL MAY BE NEEDED IF FAILURES PERSIST)";
+        if (checks.Any(c => c.Status == "WARNING")) return "ATTENTION NEEDED";
+        if (pendingReboot) return "HEALTHY BUT REBOOT PENDING";
         return "HEALTHY";
     }
 }
 
-internal static class CheckCatalog
+internal sealed record PendingRebootResult(bool IsPending, string Summary);
+internal static class PendingRebootInspector
 {
-    public static List<Func<CheckResult>> BuildChecks() =>
-    [
-        CheckOsBuild,
-        () => CheckExternal("SFC Verify", "sfc", "/verifyonly", "did not find any integrity violations", "found integrity violations"),
-        () => CheckExternal("DISM CheckHealth", "DISM", "/Online /Cleanup-Image /CheckHealth", "No component store corruption detected", "component store is repairable"),
-        CheckBootConfig,
-        CheckFreeSpace,
-        CheckCbsLog,
-        () => CheckExternal("CHKDSK Scan", "chkdsk", $"{Environment.GetEnvironmentVariable("SystemDrive") ?? "C:"} /scan", "found no problems", "Windows has made corrections"),
-        CheckWindowsUpdateHealth
-    ];
-
-    private static CheckResult CheckOsBuild()
+    public static PendingRebootResult Inspect()
     {
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            using var searcher = new ManagementObjectSearcher("SELECT Caption, BuildNumber FROM Win32_OperatingSystem");
-            var os = searcher.Get().Cast<ManagementObject>().First();
-            var build = int.Parse(os["BuildNumber"]?.ToString() ?? "0");
-            sw.Stop();
-            return build < 22000 ? new("OS Build", "Critical", $"Build {build} below Windows 11 baseline.", sw.Elapsed.TotalSeconds, "Reinstall or upgrade to Windows 11.") : new("OS Build", "Pass", $"{os["Caption"]} build {build}.", sw.Elapsed.TotalSeconds, "");
-        }
-        catch (Exception ex) { sw.Stop(); return new("OS Build", "Warning", ex.Message, sw.Elapsed.TotalSeconds, "Check WMI health."); }
+        var flags = new List<string>();
+        if (KeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")) flags.Add("CBS RebootPending");
+        if (KeyExists(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")) flags.Add("WindowsUpdate RebootRequired");
+        if (ValueExists(@"SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations")) flags.Add("PendingFileRenameOperations");
+        return new(flags.Count > 0, flags.Count > 0 ? string.Join("; ", flags) : "No pending reboot flags detected.");
     }
+    private static bool KeyExists(string path) => Registry.LocalMachine.OpenSubKey(path) is not null;
+    private static bool ValueExists(string path, string name) => Registry.LocalMachine.OpenSubKey(path)?.GetValue(name) is not null;
+}
 
-    private static CheckResult CheckBootConfig() => FromProcess("Boot Config", "bcdedit", "/enum {current}", "Pass", "Critical", "BCD current entry accessible.", "Could not read BCD current entry.", "Repair bootloader from WinRE.");
-
-    private static CheckResult CheckFreeSpace()
+internal sealed record OsInfo(string Caption, string Build, string DisplayVersion, string Manufacturer, string Model, string Serial, string Hostname);
+internal static class Wmi
+{
+    public static OsInfo QueryOs()
     {
-        var sw = Stopwatch.StartNew();
-        var drive = new DriveInfo(Environment.GetEnvironmentVariable("SystemDrive") ?? "C:");
-        sw.Stop();
-        return drive.AvailableFreeSpace < 20L * 1024 * 1024 * 1024 ? new("Free Space", "Fail", "Less than 20GB free.", sw.Elapsed.TotalSeconds, "Free up space.") : new("Free Space", "Pass", "Adequate free space.", sw.Elapsed.TotalSeconds, "");
-    }
+        using var osq = new ManagementObjectSearcher("SELECT Caption,BuildNumber FROM Win32_OperatingSystem");
+        using var csq = new ManagementObjectSearcher("SELECT Manufacturer,Model FROM Win32_ComputerSystem");
+        using var biosq = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS");
 
-    private static CheckResult CheckCbsLog()
-    {
-        var sw = Stopwatch.StartNew();
-        var exists = File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Logs", "CBS", "CBS.log"));
-        sw.Stop();
-        return exists ? new("CBS Log", "Pass", "CBS log exists.", sw.Elapsed.TotalSeconds, "") : new("CBS Log", "Warning", "CBS log not found.", sw.Elapsed.TotalSeconds, "Review servicing logs.");
-    }
+        var os = osq.Get().Cast<ManagementObject>().First();
+        var cs = csq.Get().Cast<ManagementObject>().First();
+        var bios = biosq.Get().Cast<ManagementObject>().First();
 
-    private static CheckResult CheckWindowsUpdateHealth()
-    {
-        var sw = Stopwatch.StartNew();
-        var pr = ProcessRunner.Run(
-            "powershell",
-            "-NoProfile -Command \"$e=Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WindowsUpdateClient'; Level=2; StartTime=(Get-Date).AddDays(-30)} -ErrorAction SilentlyContinue; if($e.Count -gt 20){exit 2}else{exit 0}\"");
-        sw.Stop();
-        return pr.ExitCode == 0 ? new("Windows Update Health", "Pass", "Update error volume not excessive.", sw.Elapsed.TotalSeconds, "") : new("Windows Update Health", "Warning", "High Windows Update error count detected.", sw.Elapsed.TotalSeconds, "Reset update components.");
-    }
-
-    private static CheckResult CheckExternal(string name, string file, string args, string passMarker, string failMarker)
-    {
-        var sw = Stopwatch.StartNew();
-        var pr = ProcessRunner.Run(file, args);
-        sw.Stop();
-        if (pr.Output.Contains(passMarker, StringComparison.OrdinalIgnoreCase)) return new(name, "Pass", "No integrity issue detected.", sw.Elapsed.TotalSeconds, "");
-        if (pr.Output.Contains(failMarker, StringComparison.OrdinalIgnoreCase)) return new(name, "Fail", "Integrity issue detected.", sw.Elapsed.TotalSeconds, "Run repair and recheck.");
-        return new(name, "Warning", "Could not parse command output.", sw.Elapsed.TotalSeconds, "Review raw output.");
-    }
-
-    private static CheckResult FromProcess(string name, string file, string args, string passStatus, string failStatus, string passDetail, string failDetail, string recommendation)
-    {
-        var sw = Stopwatch.StartNew();
-        var pr = ProcessRunner.Run(file, args);
-        sw.Stop();
-        return pr.ExitCode == 0 ? new(name, passStatus, passDetail, sw.Elapsed.TotalSeconds, "") : new(name, failStatus, failDetail, sw.Elapsed.TotalSeconds, recommendation);
+        var displayVersion = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion")?.GetValue("DisplayVersion")?.ToString() ?? "Unknown";
+        return new(
+            os["Caption"]?.ToString() ?? "Unknown Windows",
+            os["BuildNumber"]?.ToString() ?? "0",
+            displayVersion,
+            cs["Manufacturer"]?.ToString() ?? "Unknown",
+            cs["Model"]?.ToString() ?? "Unknown",
+            bios["SerialNumber"]?.ToString() ?? "Unknown",
+            Environment.MachineName);
     }
 }
 
-internal static class PendingRebootHelper
+internal static class SystemMetadata
 {
-    [SupportedOSPlatform("windows")]
-    public static bool IsPendingReboot()
+    public static string BuildSummary()
     {
-        return RegistryKeyExists(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")
-            || RegistryKeyExists(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")
-            || RegistryValueExists(@"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations");
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static bool RegistryKeyExists(string path)
-    {
-        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path.Replace(@"HKLM\", string.Empty));
-        return key is not null;
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static bool RegistryValueExists(string path, string valueName)
-    {
-        using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path.Replace(@"HKLM\", string.Empty));
-        return key?.GetValue(valueName) is not null;
+        var i = Wmi.QueryOs();
+        return $"Host: {i.Hostname} | Serial: {i.Serial} | Manufacturer: {i.Manufacturer} | Model: {i.Model}\nOS: {i.Caption} {i.DisplayVersion} (Build {i.Build}) | Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
     }
 }
-
-internal static class ProcessRunner
-{
-    public static ProcessResult Run(string file, string args)
-    {
-        AppLog.Log($"Process start: {file} {args}");
-        try
-        {
-            var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-            using var process = Process.Start(psi);
-            if (process is null) return new ProcessResult(-1, "Process failed to start.");
-            var output = new StringBuilder();
-            output.AppendLine(process.StandardOutput.ReadToEnd());
-            output.AppendLine(process.StandardError.ReadToEnd());
-            process.WaitForExit();
-            AppLog.Log($"Process exit: {file} code={process.ExitCode}");
-            return new ProcessResult(process.ExitCode, output.ToString());
-        }
-        catch (Exception ex) { AppLog.Log($"Process error: {file} {ex}"); return new ProcessResult(-1, ex.Message); }
-    }
-}
-
-internal sealed record CheckResult(string Name, string Status, string Details, double Seconds, string Recommendation);
-internal sealed record ProcessResult(int ExitCode, string Output);
 
 internal static class AppLog
 {
-    private static readonly object Sync = new();
-    private static bool _debug;
-    private static string _path = string.Empty;
-
+    private static readonly object LockObj = new();
+    private static string _path = "";
     public static void Initialize(bool debug)
     {
-        _debug = debug;
         var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "SystemIntegritySuite");
         Directory.CreateDirectory(dir);
-        _path = Path.Combine(dir, $"IntegrityCheckGui_{DateTime.Now:yyyyMMdd_HHmmss}.log");
-        Log($"Logger initialized. Debug={_debug}. Path={_path}");
+        _path = Path.Combine(dir, $"IntegrityTool_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+        Log($"Init. Debug={debug}");
     }
-
-    public static void Log(string message)
-    {
-        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
-        lock (Sync)
-        {
-            File.AppendAllText(_path, line + Environment.NewLine);
-        }
-        if (_debug) Debug.WriteLine(line);
-    }
+    public static void Log(string line){lock(LockObj){File.AppendAllText(_path,$"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {line}{Environment.NewLine}");}}
 }
 #else
-Console.WriteLine("IntegrityCheckGui.cs is part of a Windows Forms project.");
-Console.WriteLine("Build with: dotnet build .\\IntegrityCheckGui.csproj");
+Console.WriteLine("Build using IntegrityCheckGui.csproj on Windows.");
 #endif
