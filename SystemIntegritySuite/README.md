@@ -90,3 +90,22 @@ This repo includes `.vscode/tasks.json` with:
 - `publish-integrity-gui-single-file`
 
 Use those tasks so VS Code always builds/publishes the `.csproj` and not the raw `.cs` file.
+
+
+## Why those CS0234/CS0246 errors happen
+Those errors occur when VS Code/C# extension invokes:
+`dotnet build ...\IntegrityCheckGui.cs`
+
+That compiles a **single source file** outside the WinForms project context, so it cannot see:
+- `<UseWindowsForms>true</UseWindowsForms>`
+- Windows target framework (`net8.0-windows`)
+- NuGet references such as `System.Management`
+
+### Correct way to build
+Always build the project:
+```powershell
+dotnet build .\IntegrityCheckGui.csproj
+```
+
+Or in VS Code run task: **build-integrity-gui**.
+The workspace includes `.vscode/settings.json` to point C# tooling at `IntegrityCheckGui.csproj` by default.
