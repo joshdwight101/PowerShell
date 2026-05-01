@@ -1,5 +1,13 @@
 # Changelog - Integrity Checking & Repair Tool
 
+## v1.5.0
+- Added menu bar with `File` and `About` menus.
+- Added About popup dialog with app title, version, purpose summary, and author info.
+- Updated title bar to include app name, version, and author name.
+
+## v1.5.1
+- Fixed standalone publish build error (`CS0019`) by changing OS build type from `string` to `int`.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

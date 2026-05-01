@@ -12,15 +12,16 @@ namespace IntegrityCheckGui;
 [SupportedOSPlatform("windows")]
 internal static class Program
 {
-    private const string Version = "1.4.0";
-    private const string Author = "JD";
+    private const string AppName = "Windows 11 Integrity Checking & Repair Tool";
+    private const string Version = "1.5.0";
+    private const string Author = "Joshua Dwight";
 
     [STAThread]
     private static void Main()
     {
         AppLog.Initialize(Environment.GetCommandLineArgs().Any(a => a.Equals("--debug", StringComparison.OrdinalIgnoreCase)));
         ApplicationConfiguration.Initialize();
-        Application.Run(new MainForm(Version, Author));
+        Application.Run(new MainForm(AppName, Version, Author));
     }
 }
 
@@ -38,12 +39,25 @@ internal sealed class MainForm : Form
     private readonly Button _restartBtn;
     private List<CheckResult> _last = new();
 
-    public MainForm(string version, string author)
+    public MainForm(string appName, string version, string author)
     {
-        Text = $"Win11 Integrity Checking & Repair Tool v{version} | {author}";
+        Text = $"{appName} v{version} | Author: {author}";
         Width = 1400;
         Height = 900;
         Font = new Font("Segoe UI", 12);
+
+        var menu = new MenuStrip();
+        var fileMenu = new ToolStripMenuItem("File");
+        var exitItem = new ToolStripMenuItem("Exit");
+        exitItem.Click += (_, _) => Close();
+        fileMenu.DropDownItems.Add(exitItem);
+        var helpMenu = new ToolStripMenuItem("About");
+        var aboutItem = new ToolStripMenuItem("About This App");
+        aboutItem.Click += (_, _) => ShowAbout(appName, version, author);
+        helpMenu.DropDownItems.Add(aboutItem);
+        menu.Items.Add(fileMenu);
+        menu.Items.Add(helpMenu);
+        MainMenuStrip = menu;
 
         _summary = new Label { Dock = DockStyle.Top, Height = 36, Text = "Ready", Font = new Font("Segoe UI", 12, FontStyle.Bold) };
         _meta = new Label { Dock = DockStyle.Top, Height = 120, Text = SystemMetadata.BuildSummary(), AutoSize = false };
@@ -70,12 +84,25 @@ internal sealed class MainForm : Form
 
         _log = new RichTextBox { Dock = DockStyle.Fill, ReadOnly = true, Font = new Font("Consolas", 12) };
 
+        Controls.Add(menu);
         Controls.Add(_log);
         Controls.Add(panel);
         Controls.Add(_grid);
         Controls.Add(_progress);
         Controls.Add(_meta);
         Controls.Add(_summary);
+    }
+
+    private static void ShowAbout(string appName, string version, string author)
+    {
+        var msg =
+            $"{appName}\n" +
+            $"Version: {version}\n" +
+            $"Author: {author}\n" +
+            "GitHub: https://github.com/joshdwight101\n\n" +
+            "This tool performs deep Windows 11 integrity diagnostics, attempts built-in repair actions, " +
+            "tracks pending reboot state, and helps administrators decide whether repair or reinstall is recommended.";
+        MessageBox.Show(msg, "About", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private async Task RunChecksAsync()
@@ -273,7 +300,7 @@ internal static class PendingRebootInspector
     private static bool ValueExists(string path, string name) => Registry.LocalMachine.OpenSubKey(path)?.GetValue(name) is not null;
 }
 
-internal sealed record OsInfo(string Caption, string Build, string DisplayVersion, string Manufacturer, string Model, string Serial, string Hostname);
+internal sealed record OsInfo(string Caption, int Build, string DisplayVersion, string Manufacturer, string Model, string Serial, string Hostname);
 internal static class Wmi
 {
     public static OsInfo QueryOs()
@@ -289,7 +316,7 @@ internal static class Wmi
         var displayVersion = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion")?.GetValue("DisplayVersion")?.ToString() ?? "Unknown";
         return new(
             os["Caption"]?.ToString() ?? "Unknown Windows",
-            os["BuildNumber"]?.ToString() ?? "0",
+            int.TryParse(os["BuildNumber"]?.ToString(), out var b) ? b : 0,
             displayVersion,
             cs["Manufacturer"]?.ToString() ?? "Unknown",
             cs["Model"]?.ToString() ?? "Unknown",
