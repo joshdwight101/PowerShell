@@ -1,17 +1,24 @@
+﻿#if WINDOWS
 using System.Drawing;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Management;
 using System.Text;
+using System.Runtime.Versioning;
 
 namespace IntegrityCheckGui;
 
+[SupportedOSPlatform("windows")]
 internal static class Program
 {
     [STAThread]
     private static void Main()
     {
+        AppLog.Initialize(Environment.GetCommandLineArgs().Any(a => a.Equals("--debug", StringComparison.OrdinalIgnoreCase)));
+        AppLog.Log("Application start.");
         ApplicationConfiguration.Initialize();
+        Application.ThreadException += (_, e) => AppLog.Log($"UI thread exception: {e.Exception}");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => AppLog.Log($"Unhandled exception: {e.ExceptionObject}");
         Application.Run(new MainForm());
     }
 }
@@ -47,6 +54,7 @@ internal sealed class MainForm : Form
 
     private async Task RunChecksAsync(bool append)
     {
+        AppLog.Log($"RunChecksAsync started. append={append}");
         _runButton.Enabled = false;
         _repairButton.Enabled = false;
         if (!append) _output.Clear();
@@ -56,15 +64,18 @@ internal sealed class MainForm : Form
             var prompt = MessageBox.Show("A pending reboot is detected. Restart now?", "Pending Reboot", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
             if (prompt == DialogResult.Yes)
             {
+                AppLog.Log("Pending reboot approved by user.");
                 Process.Start(new ProcessStartInfo("shutdown", "/r /f /t 0") { UseShellExecute = false, CreateNoWindow = true });
                 return;
             }
+            AppLog.Log("Pending reboot declined by user.");
         }
 
         _header.Text = "Running checks...";
         var checks = CheckCatalog.BuildChecks();
         var tasks = checks.Select(check => Task.Run(check)).ToArray();
         _lastResults = await Task.WhenAll(tasks);
+        AppLog.Log($"Checks completed. Result count: {_lastResults.Length}");
 
         foreach (var result in _lastResults) AppendResult(result);
 
@@ -78,6 +89,7 @@ internal sealed class MainForm : Form
 
     private async Task AttemptRepairAndRecheckAsync()
     {
+        AppLog.Log("AttemptRepairAndRecheckAsync started.");
         _runButton.Enabled = false;
         _repairButton.Enabled = false;
         _output.AppendText($"{Environment.NewLine}--- Attempting repairs ---{Environment.NewLine}");
@@ -93,6 +105,7 @@ internal sealed class MainForm : Form
 
     private static CheckResult RepairAction(string name, string file, string args)
     {
+        AppLog.Log($"RepairAction start: {name} => {file} {args}");
         var sw = Stopwatch.StartNew();
         var pr = ProcessRunner.Run(file, args);
         sw.Stop();
@@ -201,6 +214,7 @@ internal static class CheckCatalog
 
 internal static class PendingRebootHelper
 {
+    [SupportedOSPlatform("windows")]
     public static bool IsPendingReboot()
     {
         return RegistryKeyExists(@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")
@@ -208,12 +222,14 @@ internal static class PendingRebootHelper
             || RegistryValueExists(@"HKLM\SYSTEM\CurrentControlSet\Control\Session Manager", "PendingFileRenameOperations");
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool RegistryKeyExists(string path)
     {
         using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path.Replace(@"HKLM\", string.Empty));
         return key is not null;
     }
 
+    [SupportedOSPlatform("windows")]
     private static bool RegistryValueExists(string path, string valueName)
     {
         using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path.Replace(@"HKLM\", string.Empty));
@@ -225,6 +241,7 @@ internal static class ProcessRunner
 {
     public static ProcessResult Run(string file, string args)
     {
+        AppLog.Log($"Process start: {file} {args}");
         try
         {
             var psi = new ProcessStartInfo(file, args) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
@@ -234,11 +251,42 @@ internal static class ProcessRunner
             output.AppendLine(process.StandardOutput.ReadToEnd());
             output.AppendLine(process.StandardError.ReadToEnd());
             process.WaitForExit();
+            AppLog.Log($"Process exit: {file} code={process.ExitCode}");
             return new ProcessResult(process.ExitCode, output.ToString());
         }
-        catch (Exception ex) { return new ProcessResult(-1, ex.Message); }
+        catch (Exception ex) { AppLog.Log($"Process error: {file} {ex}"); return new ProcessResult(-1, ex.Message); }
     }
 }
 
 internal sealed record CheckResult(string Name, string Status, string Details, double Seconds, string Recommendation);
 internal sealed record ProcessResult(int ExitCode, string Output);
+
+internal static class AppLog
+{
+    private static readonly object Sync = new();
+    private static bool _debug;
+    private static string _path = string.Empty;
+
+    public static void Initialize(bool debug)
+    {
+        _debug = debug;
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "SystemIntegritySuite");
+        Directory.CreateDirectory(dir);
+        _path = Path.Combine(dir, $"IntegrityCheckGui_{DateTime.Now:yyyyMMdd_HHmmss}.log");
+        Log($"Logger initialized. Debug={_debug}. Path={_path}");
+    }
+
+    public static void Log(string message)
+    {
+        var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}";
+        lock (Sync)
+        {
+            File.AppendAllText(_path, line + Environment.NewLine);
+        }
+        if (_debug) Debug.WriteLine(line);
+    }
+}
+#else
+Console.WriteLine("IntegrityCheckGui.cs is part of a Windows Forms project.");
+Console.WriteLine("Build with: dotnet build .\\IntegrityCheckGui.csproj");
+#endif

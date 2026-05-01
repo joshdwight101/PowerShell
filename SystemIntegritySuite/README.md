@@ -109,3 +109,14 @@ dotnet build .\IntegrityCheckGui.csproj
 
 Or in VS Code run task: **build-integrity-gui**.
 The workspace includes `.vscode/settings.json` to point C# tooling at `IntegrityCheckGui.csproj` by default.
+
+## GUI diagnostic logging
+The GUI now writes a single diagnostic log file per run to:
+`C:\ProgramData\SystemIntegritySuite\IntegrityCheckGui_yyyyMMdd_HHmmss.log`
+
+Enable extra debug tracing by launching with:
+```powershell
+.\IntegrityCheckGui.exe --debug
+```
+
+This log captures lifecycle events, process invocations, exit codes, pending reboot decisions, and unhandled exceptions to speed up troubleshooting.
