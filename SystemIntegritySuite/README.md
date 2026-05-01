@@ -74,3 +74,19 @@ This publish profile creates a self-contained single-file executable (portable, 
 The GUI now includes **Attempt Repair + Recheck**:
 - Runs repair actions for common failures (SFC scan/repair, DISM restore health, Windows Update service reset).
 - Automatically reruns full checks after repair attempts to verify whether problems persist.
+
+## VS Code build fix (important)
+If VS Code tries to run:
+`dotnet build ...\IntegrityCheckGui.cs`
+that is the wrong target and will produce errors like CS8803/CS0246/CS0234.
+
+Build the **project** instead:
+```powershell
+dotnet build .\IntegrityCheckGui.csproj
+```
+
+This repo includes `.vscode/tasks.json` with:
+- `build-integrity-gui`
+- `publish-integrity-gui-single-file`
+
+Use those tasks so VS Code always builds/publishes the `.csproj` and not the raw `.cs` file.

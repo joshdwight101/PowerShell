@@ -9,4 +9,7 @@
     <RootNamespace>IntegrityCheckGui</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="9.0.0" />
+  </ItemGroup>
 </Project>
