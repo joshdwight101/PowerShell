@@ -1,6 +1,13 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
+net session >nul 2>&1
+if not %errorlevel%==0 (
+  echo Relaunching with administrative privileges...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+  exit /b 0
+)
+
 set "REPORT=%~dp0Win11_IntegrityReport_%date:~10,4%%date:~4,2%%date:~7,2%_%time:~0,2%%time:~3,2%%time:~6,2%.log"
 set "REPORT=%REPORT: =0%"
 set /a SCORE=0
@@ -98,4 +105,5 @@ if %SCORE% GEQ 6 (
 
 echo Done. Report: "%REPORT%"
 type "%REPORT%"
+start "Integrity Report" notepad.exe "%REPORT%"
 exit /b 0
