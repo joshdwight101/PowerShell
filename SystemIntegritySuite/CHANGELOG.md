@@ -54,6 +54,11 @@
 - Added inventory summary at startup and inclusion in main log/final report flow.
 - Added optional JSON output (`-JsonReport`) with full structured `ComputerInventory` object and final results.
 
+## v2.0.0
+- Rebuilt `Win11-IntegrityCheck.cmd` into a hardened, full-featured CMD workflow.
+- Added reliable argument handling (`-silent`, `-force`, `-deep`, `-no-reboot`, `-reset-wu`, `-reset-network`, `-skip-wu-reset`, `-help`).
+- Added robust detect -> repair -> recheck workflow with verbose step/status logging and safer reboot behavior.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.
