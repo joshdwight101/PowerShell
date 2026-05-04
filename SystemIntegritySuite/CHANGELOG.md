@@ -14,6 +14,11 @@
 - Fixed clipping/cutoff issues by improving docking, row sizing, and minimum form size.
 - Improved readability of check results with wrapped details and auto-sized grid rows.
 
+## v1.6.0
+- Added automatic repair-on-failure behavior to GUI default flow (no manual recheck button required to trigger first repair cycle).
+- Updated PowerShell and CMD scripts to perform detect -> repair -> recheck workflow automatically.
+- Added smarter DISM/SFC/update-component remediation sequence prior to final reinstall recommendation.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

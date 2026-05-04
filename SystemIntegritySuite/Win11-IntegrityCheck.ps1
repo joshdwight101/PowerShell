@@ -3,128 +3,65 @@ param(
     [string]$OutputPath = ".\Win11_IntegrityReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').log",
     [switch]$Silent
 )
-
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference='Stop'
+function Test-IsAdmin { $p=New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent()); $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }
+if(-not (Test-IsAdmin)){ $silentArg=if($Silent){'-Silent'}else{''}; Start-Process powershell -Verb RunAs -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -OutputPath `"$OutputPath`" $silentArg"; exit 0 }
 
-function Test-IsAdmin {
-    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $principal = New-Object Security.Principal.WindowsPrincipal($id)
-    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$lines=New-Object System.Collections.Generic.List[string]; $score=0
+function Log([string]$m){$l="[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] $m";$script:lines.Add($l);if(-not $Silent){Write-Host $l}}
+function Score([string]$s){switch($s){'PASS'{0};'WARNING'{1};'FAIL'{2};'CRITICAL'{3};default{1}}}
+function PendingReboot{ (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -EA SilentlyContinue).PendingFileRenameOperations -ne $null) }
+
+function Run-Checks {
+    $r=@{}
+    $build=[int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuild
+    $r.OSBuild= if($build -ge 22000){'PASS'}else{'CRITICAL'}
+    Log "OS Build: $build => $($r.OSBuild)"
+
+    $sfc=cmd /c 'sfc /verifyonly'|Out-String
+    $r.SFC= if($sfc -match 'did not find any integrity violations'){'PASS'}elseif($sfc -match 'found integrity violations'){'FAIL'}else{'WARNING'}
+    Log "SFC Verify => $($r.SFC)"
+
+    $dism=cmd /c 'DISM /Online /Cleanup-Image /CheckHealth'|Out-String
+    $r.DISM= if($dism -match 'No component store corruption detected'){'PASS'}elseif($dism -match 'component store is repairable'){'FAIL'}else{'WARNING'}
+    Log "DISM CheckHealth => $($r.DISM)"
+
+    cmd /c 'bcdedit /enum {current}' >$null 2>&1
+    $r.Boot= if($LASTEXITCODE -eq 0){'PASS'}else{'CRITICAL'}
+    Log "Boot Config => $($r.Boot)"
+
+    $chk=cmd /c "chkdsk $env:SystemDrive /scan"|Out-String
+    $r.CHKDSK= if($chk -match 'found no problems'){'PASS'}else{'WARNING'}
+    Log "CHKDSK => $($r.CHKDSK)"
+
+    $r.CBS= if(Test-Path "$env:windir\Logs\CBS\CBS.log"){'PASS'}else{'WARNING'}
+    Log "CBS Log => $($r.CBS)"
+
+    $free=(Get-PSDrive -Name $env:SystemDrive.TrimEnd(':')).Free
+    $r.FreeSpace= if($free -ge 20GB){'PASS'}else{'FAIL'}
+    Log "Free Space => $($r.FreeSpace)"
+    return $r
 }
 
-if (-not (Test-IsAdmin)) {
-    if (-not $Silent) { Write-Host "Relaunching with administrative privileges..." }
-    $silentArg = if ($Silent) { '-Silent' } else { '' }
-    $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -OutputPath `"$OutputPath`" $silentArg"
-    Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList $argList | Out-Null
-    exit 0
+function Repair-Issues($res){
+    Log '--- Repair phase started ---'
+    if($res.DISM -in 'FAIL','WARNING'){ Log 'Running DISM RestoreHealth...'; cmd /c 'DISM /Online /Cleanup-Image /RestoreHealth'|Out-Null }
+    if($res.SFC -in 'FAIL','WARNING' -or $res.DISM -in 'FAIL','WARNING'){ Log 'Running SFC Scannow...'; cmd /c 'sfc /scannow'|Out-Null }
+    if($res.CHKDSK -eq 'WARNING'){ Log 'Running CHKDSK scan retry...'; cmd /c "chkdsk $env:SystemDrive /scan"|Out-Null }
+    Log 'Resetting Windows Update components...'
+    cmd /c 'net stop wuauserv & net stop bits & net stop cryptsvc & ren %systemroot%\SoftwareDistribution SoftwareDistribution.bak & ren %systemroot%\System32\catroot2 catroot2.bak & net start cryptsvc & net start bits & net start wuauserv' | Out-Null
 }
 
-$score = 0
-$lines = New-Object System.Collections.Generic.List[string]
+Log 'Windows 11 Integrity Check + Auto Repair'
+Log "Host: $env:COMPUTERNAME | User: $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+$first=Run-Checks
+$firstFail=$first.Values | Where-Object {$_ -ne 'PASS'}
+if($firstFail){ Repair-Issues $first; Log '--- Recheck after repair ---'; $final=Run-Checks } else { $final=$first }
 
-function Add-Log {
-    param([string]$Message)
-    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff'
-    $line = "[$stamp] $Message"
-    $script:lines.Add($line)
-    if (-not $Silent) { Write-Host $line }
-}
-
-
-function Test-PendingReboot {
-    $paths = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending',
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired'
-    )
-    foreach ($path in $paths) { if (Test-Path $path) { return $true } }
-    $sessionManager = Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -ErrorAction SilentlyContinue
-    return $null -ne $sessionManager.PendingFileRenameOperations
-}
-
-function Add-Result {
-    param([string]$Message,[int]$Points=0)
-    $script:score += $Points
-    Add-Log $Message
-}
-
-$hostname = $env:COMPUTERNAME
-$user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-$ips = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-    Where-Object { $_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1' } |
-    Select-Object -ExpandProperty IPAddress -Unique)
-if (-not $ips) { $ips = @('Unavailable') }
-
-Add-Log 'Windows 11 Integrity Check'
-Add-Log "Hostname: $hostname"
-Add-Log "User: $user"
-Add-Log "IPv4: $($ips -join ', ')"
-Add-Log '------------------------------------'
-
-if (Test-PendingReboot) {
-    Add-Log 'PENDING REBOOT DETECTED.'
-    if ($Silent) {
-        Add-Log 'Silent mode: restarting immediately with force flag.'
-        shutdown.exe /r /f /t 0 | Out-Null
-        exit 0
-    }
-    $choice = Read-Host 'A pending reboot is detected. Restart now? (Y/N)'
-    if ($choice -match '^(Y|y)$') {
-        Add-Log 'User approved restart. Restarting with force flag.'
-        shutdown.exe /r /f /t 0 | Out-Null
-        exit 0
-    }
-    Add-Log 'User declined immediate restart; continuing checks.'
-}
-
-Add-Log '[1/7] Checking OS Build...'
-$build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuild
-if ($build -lt 22000) { Add-Result "CRITICAL: Build $build is below Windows 11 baseline." 3 }
-else { Add-Result "PASS: Build $build detected." }
-
-Add-Log '[2/7] Running SFC verifyonly...'
-$sfcText = cmd /c 'sfc /verifyonly' | Out-String
-if ($sfcText -match 'did not find any integrity violations') { Add-Result 'PASS: SFC found no integrity violations.' }
-elseif ($sfcText -match 'found integrity violations') { Add-Result 'FAIL: SFC found integrity violations.' 2 }
-else { Add-Result 'WARNING: Could not conclusively parse SFC output.' 1 }
-
-Add-Log '[3/7] Running DISM CheckHealth...'
-$dismText = cmd /c 'DISM /Online /Cleanup-Image /CheckHealth' | Out-String
-if ($dismText -match 'No component store corruption detected') { Add-Result 'PASS: DISM reports healthy component store.' }
-elseif ($dismText -match 'component store is repairable') { Add-Result 'FAIL: DISM reports component store corruption.' 2 }
-else { Add-Result 'WARNING: Could not conclusively parse DISM output.' 1 }
-
-Add-Log '[4/7] Checking boot configuration...'
-cmd /c 'bcdedit /enum {current}' > $null 2>&1
-if ($LASTEXITCODE -ne 0) { Add-Result 'CRITICAL: Unable to read BCD current entry.' 3 }
-else { Add-Result 'PASS: BCD current entry accessible.' }
-
-Add-Log '[5/7] Checking volume errors on system drive...'
-$chkText = cmd /c "chkdsk $env:SystemDrive /scan" | Out-String
-if ($chkText -match 'found no problems') { Add-Result 'PASS: CHKDSK scan found no file system problems.' }
-else { Add-Result 'WARNING: CHKDSK reported findings; review output.' 1 }
-
-Add-Log '[6/7] Checking servicing health via CBS log presence...'
-if (Test-Path "$env:windir\Logs\CBS\CBS.log") { Add-Result 'PASS: CBS log exists for servicing diagnostics.' }
-else { Add-Result 'WARNING: CBS.log not found.' 1 }
-
-Add-Log '[7/7] Checking free space on system drive...'
-$free = (Get-PSDrive -Name $env:SystemDrive.TrimEnd(':')).Free
-if ($free -lt 20GB) { Add-Result 'FAIL: Less than 20GB free on system drive.' 2 }
-else { Add-Result 'PASS: Adequate free space available.' }
-
-Add-Log '------------------------------------'
-if ($score -ge 6) { $overall = 'OVERALL: REINSTALL OR IN-PLACE REPAIR HIGHLY RECOMMENDED' }
-elseif ($score -ge 3) { $overall = 'OVERALL: REPAIR ACTION RECOMMENDED' }
-else { $overall = 'OVERALL: NO REINSTALL SIGNAL DETECTED' }
-Add-Log $overall
-
-$lines | Set-Content -Path $OutputPath -Encoding UTF8
-Add-Log "Report saved to $OutputPath"
-$lines | Set-Content -Path $OutputPath -Encoding UTF8
-
-if (-not $Silent) {
-    Get-Content $OutputPath
-    Start-Process notepad.exe $OutputPath
-}
+if(PendingReboot){ Log 'Pending reboot detected after checks/repairs.'; if($Silent){shutdown /r /f /t 0; exit 0} }
+$score=($final.Values|ForEach-Object{Score $_}|Measure-Object -Sum).Sum
+$overall= if($score -ge 6){'OVERALL: REINSTALL RECOMMENDED'}elseif($score -ge 3){'OVERALL: REPAIR INSTALL RECOMMENDED'}else{'OVERALL: HEALTHY/REPAIRED'}
+Log $overall
+$lines|Set-Content $OutputPath -Encoding UTF8
+if(-not $Silent){Get-Content $OutputPath; Start-Process notepad $OutputPath}

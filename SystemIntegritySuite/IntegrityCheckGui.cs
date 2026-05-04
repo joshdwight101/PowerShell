@@ -38,6 +38,7 @@ internal sealed class MainForm : Form
     private readonly Button _resetWindowsBtn;
     private readonly Button _restartBtn;
     private List<CheckResult> _last = new();
+    private bool _autoRepairAttempted;
 
     public MainForm(string appName, string version, string author)
     {
@@ -163,6 +164,17 @@ internal sealed class MainForm : Form
         _summary.Text = $"Completed: {overall}";
         WriteLog($"OVERALL: {overall}");
 
+        if (_last.Any(r => r.Status is "FAIL" or "WARNING"))
+        {
+            if (!_autoRepairAttempted)
+            {
+                _autoRepairAttempted = true;
+                WriteLog("Auto-repair trigger: failures/warnings detected. Starting repair workflow...");
+                await AutoRepairAndRecheckAsync();
+                return;
+            }
+        }
+
         if (pending.IsPending)
         {
             var prompt = MessageBox.Show("Pending reboot detected after checks. Restart now?", "Pending Reboot", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
@@ -174,6 +186,7 @@ internal sealed class MainForm : Form
 
         _repairBtn.Enabled = _last.Any(r => r.Status is "FAIL" or "WARNING");
         _runBtn.Enabled = true;
+        _autoRepairAttempted = false;
     }
 
     private async Task AttemptRepairAndRecheckAsync()
@@ -187,6 +200,20 @@ internal sealed class MainForm : Form
             WriteLog($"REPAIR END: {rr.Name} => {rr.Status} :: {rr.Details}");
         }
         WriteLog("--- Repair attempts complete. Rechecking... ---");
+        await RunChecksAsync();
+    }
+
+    private async Task AutoRepairAndRecheckAsync()
+    {
+        var repairs = RepairCatalog.BuildRepairs(_last);
+        foreach (var repair in repairs)
+        {
+            WriteLog($"AUTO-REPAIR START: {repair.Name}");
+            var rr = await Task.Run(repair.Action);
+            WriteLog($"AUTO-REPAIR END: {rr.Name} => {rr.Status} :: {rr.Details}");
+        }
+        WriteLog("AUTO-RECHECK: running integrity checks after repair attempts...");
+        _runBtn.Enabled = true;
         await RunChecksAsync();
     }
 
