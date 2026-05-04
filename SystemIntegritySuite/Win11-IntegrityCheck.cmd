@@ -61,6 +61,18 @@ if "%PENDING_REBOOT_PRE%"=="1" call :log "Pending reboot detected BEFORE checks.
 
 call :run_checks first
 call :determine_need_repair first NEEDREPAIR
+if /I "%first_FREESPACE%"=="FAIL" (
+  call :log "Free space is below 10 GB. Heavy repairs may fail."
+  if "%FORCE%"=="0" (
+    if "%SILENT%"=="1" (
+      call :log "Silent mode without -force: heavy repairs will be skipped due to low free space."
+      set "NEEDREPAIR=0"
+    ) else (
+      choice /C YN /N /M "Low free space detected (<10GB). Continue heavy repairs anyway? [Y/N]: "
+      if errorlevel 2 set "NEEDREPAIR=0"
+    )
+  )
+)
 
 if "%NEEDREPAIR%"=="1" (
   set /a REPAIR_ATTEMPTED=1
@@ -179,22 +191,14 @@ if exist "%windir%\Logs\CBS\CBS.log" (set "%PFX%_CBS=PASS") else (set "%PFX%_CBS
 call :log "RESULT [PASS/FAIL]: CBS Log Status=!%PFX%_CBS!"
 
 call :step 7 7 "Checking system drive free space"
-set "FREESPACE=0"
-set "TOTALSPACE=0"
-set "FREESPACE_GB=0"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$d=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%SystemDrive%'\"; if($d){[int64]$d.FreeSpace}else{0}"`) do set "FREESPACE=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$d=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%SystemDrive%'\"; if($d){[int64]$d.Size}else{0}"`) do set "TOTALSPACE=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[math]::Round(([double]%FREESPACE%/1GB),2)"`) do set "FREESPACE_GB=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "if([int64]%FREESPACE% -ge 21474836480){'PASS'}else{'FAIL'}"`) do set "%PFX%_FREESPACE=%%A"
-if not defined %PFX%_FREESPACE set "%PFX%_FREESPACE=WARNING"
-call :log "RESULT [PASS/FAIL]: Free Space Status=!%PFX%_FREESPACE! (FreeBytes=%FREESPACE% FreeGB=%FREESPACE_GB%)"
+call :check_free_space %PFX%
 exit /b
 
 :determine_need_repair
 set "PFX=%~1"
 set "RET=%~2"
 set "%RET%=0"
-for %%V in (SFC DISM CHKDSK BOOT FREESPACE) do (
+for %%V in (SFC DISM CHKDSK BOOT) do (
   if /I not "!%PFX%_%%V!"=="PASS" set "%RET%=1"
 )
 if "%RESET_WU%"=="1" set "%RET%=1"
@@ -298,6 +302,8 @@ if /I "%~1"=="CRITICAL" set /a SCORE+=3
 exit /b
 
 :final_verdict
+if /I "%final_FREESPACE%"=="FAIL" call :log "NOTICE: Free space is low (<10GB). This alone does not prove corruption, but can cause DISM/SFC/WU repairs to fail."
+if /I "%final_FREESPACE%"=="WARNING" call :log "NOTICE: Free space is between 10GB and 20GB. Free additional space before deep repair operations."
 if %SCORE% GEQ 6 (
   call :log "OVERALL: REINSTALL RECOMMENDED"
   call :log "SUGGESTION: Repairs did not resolve critical integrity issues; reinstall or repair-install Windows 11."
@@ -330,6 +336,32 @@ cmd /c "%COMMAND%" > "%OUTFILE%" 2>&1
 set "RC=%ERRORLEVEL%"
 call :log "END: %TASKNAME% exit code=%RC%"
 endlocal & set "RUN_LONG_RC=%RC%"
+exit /b
+
+:check_free_space
+set "PFX=%~1"
+set "%PFX%_FREESPACE=WARNING"
+set "SYSTEM_DRIVE_CHECKED=%SystemDrive%"
+set "SYSTEM_DRIVE_TOTAL_GB=Unknown"
+set "SYSTEM_DRIVE_FREE_GB=Unknown"
+set "SYSTEM_DRIVE_FREE_PCT=Unknown"
+set "SYSTEM_DRIVE_FREE_BYTES=Unknown"
+for /f "usebackq tokens=1-6 delims=|" %%A in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$drive=$env:SystemDrive; try{$disk=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='$env:SystemDrive'\" -EA Stop; $tb=[int64]$disk.Size; $fb=[int64]$disk.FreeSpace; $tg=[math]::Round($tb/1GB,2); $fg=[math]::Round($fb/1GB,2); $fp=if($tb -gt 0){[math]::Round(($fb/$tb)*100,2)}else{0}; $st=if($fb -ge 20GB){'PASS'}elseif($fb -ge 10GB){'WARNING'}else{'FAIL'}; \"$st|$drive|$tg|$fg|$fp|$fb\" }catch{ \"WARNING|$drive|Unknown|Unknown|Unknown|Unknown\" }"`) do (
+  set "%PFX%_FREESPACE=%%A"
+  set "SYSTEM_DRIVE_CHECKED=%%B"
+  set "SYSTEM_DRIVE_TOTAL_GB=%%C"
+  set "SYSTEM_DRIVE_FREE_GB=%%D"
+  set "SYSTEM_DRIVE_FREE_PCT=%%E"
+  set "SYSTEM_DRIVE_FREE_BYTES=%%F"
+)
+call :log "System Drive Free Space Check"
+call :log "Drive: %SYSTEM_DRIVE_CHECKED%"
+call :log "Total: %SYSTEM_DRIVE_TOTAL_GB% GB"
+call :log "Free: %SYSTEM_DRIVE_FREE_GB% GB"
+call :log "Free Percent: %SYSTEM_DRIVE_FREE_PCT%%"
+call :log "Raw Free Bytes: %SYSTEM_DRIVE_FREE_BYTES%"
+call :log "Thresholds: PASS>=20GB, WARNING>=10GB and <20GB, FAIL<10GB"
+call :log "RESULT [PASS/FAIL]: Free Space Status=!%PFX%_FREESPACE!"
 exit /b
 
 :step

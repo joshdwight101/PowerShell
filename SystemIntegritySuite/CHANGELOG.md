@@ -71,6 +71,10 @@
 - Fixed CMD free-space status false-failure issue by moving threshold comparison into PowerShell (64-bit safe).
 - Added verbose free-space reporting (bytes and GB) to improve troubleshooting clarity.
 
+## v2.0.4
+- Added dedicated `:check_free_space` function with PASS/WARNING/FAIL thresholds (20GB/10GB).
+- Ensured low free space does not automatically trigger heavy repairs; repairs now key off SFC/DISM/CHKDSK/BOOT outcomes.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.
