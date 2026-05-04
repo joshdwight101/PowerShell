@@ -63,10 +63,29 @@ function Repair-Issues($res){
 }
 
 Log 'Windows 11 Integrity Check + Auto Repair'
+$cs = Get-CimInstance Win32_ComputerSystem
+$bios = Get-CimInstance Win32_BIOS
+$os = Get-CimInstance Win32_OperatingSystem
+$adp = Get-NetAdapter | Where-Object Status -eq Up | Select-Object -First 1
+$ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty IPAddress -First 1)
 Log "Host: $env:COMPUTERNAME | User: $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Log "Serial: $($bios.SerialNumber) | Manufacturer: $($cs.Manufacturer) | Model: $($cs.Model)"
+Log "IP: $ip | MAC: $($adp.MacAddress)"
+Log "OS: $($os.Caption) | Version: $($os.Version) | Build: $($os.BuildNumber)"
+Log "Run start time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
+$phaseStart=Get-Date
 $first=Run-Checks
+Log "Initial check phase duration: $([math]::Round(((Get-Date)-$phaseStart).TotalSeconds,1))s"
 $firstFail=$first.Values | Where-Object {$_ -ne 'PASS'}
-if($firstFail){ Repair-Issues $first; Log '--- Recheck after repair ---'; $final=Run-Checks } else { $final=$first }
+if($firstFail){
+    $repairStart=Get-Date
+    Repair-Issues $first
+    Log "Repair phase duration: $([math]::Round(((Get-Date)-$repairStart).TotalSeconds,1))s"
+    Log '--- Recheck after repair ---'
+    $recheckStart=Get-Date
+    $final=Run-Checks
+    Log "Recheck phase duration: $([math]::Round(((Get-Date)-$recheckStart).TotalSeconds,1))s"
+} else { $final=$first }
 
 if(PendingReboot){
     Log 'Pending reboot detected after checks/repairs.'
@@ -78,5 +97,9 @@ if(PendingReboot){
 $score=($final.Values|ForEach-Object{Score $_}|Measure-Object -Sum).Sum
 $overall= if($score -ge 6){'OVERALL: REINSTALL RECOMMENDED'}elseif($score -ge 3){'OVERALL: REPAIR INSTALL RECOMMENDED'}else{'OVERALL: HEALTHY/REPAIRED'}
 Log $overall
+if($overall -like '*REINSTALL*'){ Log 'SUGGESTION: Repairs did not return system to healthy state. Windows reinstall/in-place repair strongly recommended.' }
+elseif($overall -like '*REPAIR INSTALL*'){ Log 'SUGGESTION: Perform in-place repair install if issues continue after reboot and update cycle.' }
+else { Log 'SUGGESTION: System appears repaired/healthy; continue monitoring event logs and update health.' }
+Log "Run end time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
 $lines|Set-Content $OutputPath -Encoding UTF8
 if(-not $Silent){Get-Content $OutputPath; Start-Process notepad $OutputPath}

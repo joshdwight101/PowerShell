@@ -28,6 +28,11 @@
 - Ensured pending reboot handling prompts interactive users to reboot now while keeping silent-mode auto reboot behavior.
 - Preserved full date+time timestamps on all console/report log entries.
 
+## v1.6.3
+- Added richer workstation inventory details to script reports (hostname, serial, manufacturer, model, IP, MAC, OS version/build).
+- Added explicit run start/end timestamps and phase duration timestamps in PowerShell output.
+- Added repair outcome guidance text (including reinstall recommendation when unresolved issues remain).
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

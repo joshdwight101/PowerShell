@@ -7,6 +7,19 @@ net session >nul 2>&1 || (powershell -NoProfile -ExecutionPolicy Bypass -WindowS
 set "REPORT=%~dp0Win11_IntegrityReport_%date:~10,4%%date:~4,2%%date:~7,2%_%time:~0,2%%time:~3,2%%time:~6,2%.log"
 set "REPORT=%REPORT: =0%"
 call :log "Windows 11 Integrity Check + Auto Repair"
+for /f "tokens=2 delims==" %%A in ('wmic bios get serialnumber /value ^| find "="') do set "SERIAL=%%A"
+for /f "tokens=2 delims==" %%A in ('wmic computersystem get manufacturer /value ^| find "="') do set "MFG=%%A"
+for /f "tokens=2 delims==" %%A in ('wmic computersystem get model /value ^| find "="') do set "MODEL=%%A"
+for /f "tokens=2 delims==" %%A in ('wmic os get version /value ^| find "="') do set "OSVER=%%A"
+for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /c:"IPv4 Address"') do (set "IP=%%A" & goto :ipdone)
+:ipdone
+set "IP=%IP: =%"
+for /f "tokens=1 delims= " %%A in ('getmac /fo csv /nh ^| findstr /v "N/A"') do (set "MAC=%%~A" & goto :macdone)
+:macdone
+set "MAC=%MAC:\"=%"
+call :log "Host: %COMPUTERNAME% | Serial: %SERIAL% | Manufacturer: %MFG% | Model: %MODEL%"
+call :log "IP: %IP% | MAC: %MAC% | Windows Version: %OSVER%"
+call :log "Run start time: %date% %time%"
 call :run_checks first
 if not "%first_SFC%"=="PASS" set NEEDREPAIR=1
 if not "%first_DISM%"=="PASS" set NEEDREPAIR=1
@@ -39,6 +52,10 @@ if "%PENDING_REBOOT%"=="1" (
 set /a SCORE=0
 for %%S in (!final_OSBuild! !final_SFC! !final_DISM! !final_Boot! !final_CHKDSK! !final_CBS! !final_FreeSpace!) do call :score %%S
 if !SCORE! GEQ 6 (call :log "OVERALL: REINSTALL RECOMMENDED") else if !SCORE! GEQ 3 (call :log "OVERALL: REPAIR INSTALL RECOMMENDED") else (call :log "OVERALL: HEALTHY/REPAIRED")
+if !SCORE! GEQ 6 (call :log "SUGGESTION: Repairs did not resolve critical integrity issues. Reinstall Windows 11 is recommended.")
+if !SCORE! GEQ 3 if !SCORE! LSS 6 (call :log "SUGGESTION: Consider in-place repair install if issues persist after reboot.")
+if !SCORE! LSS 3 (call :log "SUGGESTION: System appears healthy/repaired. Continue monitoring.")
+call :log "Run end time: %date% %time%"
 if "%SILENT%"=="0" (type "%REPORT%" & start "Report" notepad "%REPORT%")
 exit /b
 
