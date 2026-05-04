@@ -41,6 +41,10 @@
 - Hardened CMD startup further by moving metadata collection into a fault-tolerant subroutine with temp-file parsing.
 - Added safe defaults and error-tolerant PowerShell metadata export to prevent premature script termination.
 
+## v1.6.6
+- Simplified CMD metadata collection again to prevent early-stage failures on strict CMD environments.
+- Added explicit fallback when PowerShell is unavailable and per-field non-fatal metadata lookups.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

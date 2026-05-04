@@ -142,27 +142,11 @@ set "MODEL=Unknown"
 set "OSVER=Unknown"
 set "IP=Unknown"
 set "MAC=Unknown"
-set "META_TMP=%TEMP%\integrity_meta_%RANDOM%.txt"
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ErrorActionPreference='SilentlyContinue';" ^
-  "$cs=Get-CimInstance Win32_ComputerSystem;" ^
-  "$bios=Get-CimInstance Win32_BIOS;" ^
-  "$os=Get-CimInstance Win32_OperatingSystem;" ^
-  "$ip=(Get-NetIPAddress -AddressFamily IPv4 | ? {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} | select -First 1 -ExpandProperty IPAddress);" ^
-  "$mac=(Get-NetAdapter | ? Status -eq 'Up' | select -First 1 -ExpandProperty MacAddress);" ^
-  "'SERIAL=' + $bios.SerialNumber;" ^
-  "'MFG=' + $cs.Manufacturer;" ^
-  "'MODEL=' + $cs.Model;" ^
-  "'OSVER=' + $os.Version;" ^
-  "'IP=' + $ip;" ^
-  "'MAC=' + $mac" > "%META_TMP%" 2>nul
-for /f "usebackq tokens=1,* delims==" %%K in ("%META_TMP%") do (
-  if /I "%%K"=="SERIAL" set "SERIAL=%%L"
-  if /I "%%K"=="MFG" set "MFG=%%L"
-  if /I "%%K"=="MODEL" set "MODEL=%%L"
-  if /I "%%K"=="OSVER" set "OSVER=%%L"
-  if /I "%%K"=="IP" set "IP=%%L"
-  if /I "%%K"=="MAC" set "MAC=%%L"
-)
-if exist "%META_TMP%" del "%META_TMP%" >nul 2>&1
+where powershell >nul 2>&1 || exit /b 0
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_BIOS -EA SilentlyContinue).SerialNumber" 2^>nul`) do if not "%%A"=="" set "SERIAL=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Manufacturer" 2^>nul`) do if not "%%A"=="" set "MFG=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Model" 2^>nul`) do if not "%%A"=="" set "MODEL=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem -EA SilentlyContinue).Version" 2^>nul`) do if not "%%A"=="" set "OSVER=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 -EA SilentlyContinue ^| ? {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} ^| Select-Object -First 1 -ExpandProperty IPAddress)" 2^>nul`) do if not "%%A"=="" set "IP=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetAdapter -EA SilentlyContinue ^| ? Status -eq 'Up' ^| Select-Object -First 1 -ExpandProperty MacAddress)" 2^>nul`) do if not "%%A"=="" set "MAC=%%A"
 exit /b
