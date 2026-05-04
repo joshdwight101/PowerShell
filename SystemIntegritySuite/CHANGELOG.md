@@ -63,6 +63,10 @@
 - Added non-freezing long-command execution wrapper with live elapsed progress for DISM/SFC/CHKDSK stages.
 - Improved operator visibility during long repairs (especially `DISM /RestoreHealth`) with start/end and periodic status output.
 
+## v2.0.2
+- Fixed command-wrapper quoting bug that caused \"The filename, directory name, or volume label syntax is incorrect\" during SFC start.
+- Simplified long-run execution wrapper to a safer direct command invocation with explicit start/end logging.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

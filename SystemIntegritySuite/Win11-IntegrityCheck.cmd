@@ -314,27 +314,16 @@ for %%V in (OSBuild SFC DISM BOOT CHKDSK CBS FREESPACE) do set "%~1_%%V="
 exit /b
 
 :run_long
-setlocal EnableDelayedExpansion
+setlocal
 set "TASKNAME=%~1"
 set "COMMAND=%~2"
 set "OUTFILE=%~3"
-set "LOCKFILE=%TEMP%\integrity_lock_%RANDOM%.lck"
-set "RCFILE=%TEMP%\integrity_rc_%RANDOM%.txt"
-if exist "!OUTFILE!" del /q "!OUTFILE!" >nul 2>&1
-call :log "START: !TASKNAME!"
-start "" /b cmd /v:on /c "(echo running>\"!LOCKFILE!\" & !COMMAND! >\"!OUTFILE!\" 2>&1 & echo !errorlevel!>\"!RCFILE!\" & del /q \"!LOCKFILE!\" >nul 2>&1)"
-set /a ELAPSED=0
-:run_long_wait
-if exist "!LOCKFILE!" (
-  set /a ELAPSED+=5
-  if "%SILENT%"=="0" echo [!date! !time!] ... !TASKNAME! in progress (!ELAPSED!s elapsed)
-  timeout /t 5 /nobreak >nul
-  goto run_long_wait
-)
-set "RC=1"
-if exist "!RCFILE!" set /p RC=<"!RCFILE!"
-if exist "!RCFILE!" del /q "!RCFILE!" >nul 2>&1
-call :log "END: !TASKNAME! exit code=!RC! elapsed=!ELAPSED!s"
+if exist "%OUTFILE%" del /q "%OUTFILE%" >nul 2>&1
+call :log "START: %TASKNAME% (this can take a while; please wait)"
+if "%SILENT%"=="0" echo [INFO] %TASKNAME% is running...
+cmd /c "%COMMAND%" > "%OUTFILE%" 2>&1
+set "RC=%ERRORLEVEL%"
+call :log "END: %TASKNAME% exit code=%RC%"
 endlocal & set "RUN_LONG_RC=%RC%"
 exit /b
 
