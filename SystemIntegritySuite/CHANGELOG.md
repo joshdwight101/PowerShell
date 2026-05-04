@@ -67,6 +67,10 @@
 - Fixed command-wrapper quoting bug that caused \"The filename, directory name, or volume label syntax is incorrect\" during SFC start.
 - Simplified long-run execution wrapper to a safer direct command invocation with explicit start/end logging.
 
+## v2.0.3
+- Fixed CMD free-space status false-failure issue by moving threshold comparison into PowerShell (64-bit safe).
+- Added verbose free-space reporting (bytes and GB) to improve troubleshooting clarity.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

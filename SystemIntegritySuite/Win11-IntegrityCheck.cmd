@@ -179,10 +179,15 @@ if exist "%windir%\Logs\CBS\CBS.log" (set "%PFX%_CBS=PASS") else (set "%PFX%_CBS
 call :log "RESULT [PASS/FAIL]: CBS Log Status=!%PFX%_CBS!"
 
 call :step 7 7 "Checking system drive free space"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[int64](Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%SystemDrive%'\").FreeSpace"`) do set "FREESPACE=%%A"
-if not defined FREESPACE set "FREESPACE=0"
-if %FREESPACE% GEQ 21474836480 (set "%PFX%_FREESPACE=PASS") else (set "%PFX%_FREESPACE=FAIL")
-call :log "RESULT [PASS/FAIL]: Free Space Status=!%PFX%_FREESPACE!"
+set "FREESPACE=0"
+set "TOTALSPACE=0"
+set "FREESPACE_GB=0"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$d=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%SystemDrive%'\"; if($d){[int64]$d.FreeSpace}else{0}"`) do set "FREESPACE=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "$d=Get-CimInstance Win32_LogicalDisk -Filter \"DeviceID='%SystemDrive%'\"; if($d){[int64]$d.Size}else{0}"`) do set "TOTALSPACE=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "[math]::Round(([double]%FREESPACE%/1GB),2)"`) do set "FREESPACE_GB=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "if([int64]%FREESPACE% -ge 21474836480){'PASS'}else{'FAIL'}"`) do set "%PFX%_FREESPACE=%%A"
+if not defined %PFX%_FREESPACE set "%PFX%_FREESPACE=WARNING"
+call :log "RESULT [PASS/FAIL]: Free Space Status=!%PFX%_FREESPACE! (FreeBytes=%FREESPACE% FreeGB=%FREESPACE_GB%)"
 exit /b
 
 :determine_need_repair
