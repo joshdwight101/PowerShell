@@ -41,11 +41,13 @@ if "%PRE_REBOOT%"=="1" call :log "Pending reboot detected BEFORE checks."
 
 call :run_checks first
 call :determine_need_repair first NEEDREPAIR
-
-if /I "%first_FREESPACE%"=="FAIL" if "%FORCE%"=="0" (
-  if "%SILENT%"=="1" (call :log "Low free space and silent mode without -force. Skipping heavy repair." & set "NEEDREPAIR=0") else (
-    choice /C YN /N /M "Low free space (<10GB). Continue heavy repairs? [Y/N]: "
-    if errorlevel 2 set "NEEDREPAIR=0"
+if /I "%first_FREESPACE%"=="FAIL" (
+  call :log "Free space is below 10 GB. Heavy repairs may fail."
+  if "%FORCE%"=="0" (
+    if "%SILENT%"=="1" (call :log "Silent mode without -force: skipping heavy repair." & set "NEEDREPAIR=0") else (
+      choice /C YN /N /M "Low free space (<10GB). Continue heavy repairs? [Y/N]: "
+      if errorlevel 2 set "NEEDREPAIR=0"
+    )
   )
 )
 
@@ -83,7 +85,6 @@ set "BUILD=Unknown"
 set "UBR=Unknown"
 set "FULLBUILD=Unknown"
 set "USERCTX=%USERDOMAIN%\%USERNAME%"
-
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_BIOS -EA SilentlyContinue).SerialNumber"`) do if not "%%A"=="" set "SERIAL=%%A"
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Manufacturer"`) do if not "%%A"=="" set "MFG=%%A"
 for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).Model"`) do if not "%%A"=="" set "MODEL=%%A"
@@ -110,7 +111,7 @@ call :log "Primary IPv4: %IPV4%"
 call :log "MAC Address: %MAC%"
 exit /b
 
-:: Network inventory via temp PS1 to avoid fragile CMD escaping.
+:: Robust network inventory using single PowerShell invocation with line-based key output.
 :collect_network_inventory
 set "IPV4=Unavailable"
 set "MAC=Unavailable"
@@ -124,58 +125,16 @@ set "DNS_SERVERS=Unavailable"
 set "DHCP_STATUS=Unknown"
 set "NETWORK_CATEGORY=Unknown"
 set "LINK_SPEED=Unknown"
-set "PSNET=%TEMP%\Win11_NetworkInventory_%RANDOM%.ps1"
-set "PSOUT=%TEMP%\Win11_NetworkInventory_%RANDOM%.txt"
 
-(
-  echo $ErrorActionPreference='SilentlyContinue'
-  echo $all = Get-NetIPConfiguration ^| Where-Object { $_.NetAdapter }
-  echo $usable = $all ^| Where-Object {
-  echo   $_.NetAdapter.Status -eq 'Up' -and $_.IPv4Address -and $_.IPv4Address.IPAddress -notlike '169.254*' -and $_.IPv4Address.IPAddress -ne '127.0.0.1'
-  echo }
-  echo $ranked = $usable ^| Sort-Object @{Expression={ if($_.IPv4DefaultGateway.NextHop){0}else{1}}}, @{Expression={ if($_.NetAdapter.InterfaceDescription -match 'Hyper-V^|Virtual^|VMware^|VirtualBox^|VPN^|TAP^|TUN^|Bluetooth^|Wi-Fi Direct^|Loopback^|Teredo'){1}else{0}}}, InterfaceIndex
-  echo $primary = $ranked ^| Select-Object -First 1
-  echo if(-not $primary){
-  echo   $fallback = Get-CimInstance Win32_NetworkAdapterConfiguration ^| Where-Object { $_.IPEnabled -eq $true -and $_.IPAddress -and $_.MACAddress }
-  echo   $f = $fallback ^| Select-Object -First 1
-  echo   if($f){
-  echo     $ipv4 = ($f.IPAddress ^| Where-Object {$_ -match '^\d+\.' -and $_ -notlike '169.254*'} ^| Select-Object -First 1)
-  echo     if(-not $ipv4){ $ipv4='Unavailable' }
-  echo     "PRIMARY|$($f.Description)|$($f.Description)|$($f.Description)|$($f.InterfaceIndex)|$($f.MACAddress)|$ipv4|Unavailable|$($f.DefaultIPGateway -join ',')|$($f.DNSServerSearchOrder -join ',')|Unknown|Unknown|Unknown"
-  echo   } else {
-  echo     "PRIMARY|Unknown|Unknown|Unknown|Unknown|Unavailable|Unavailable|Unavailable|Unavailable|Unavailable|Unknown|Unknown|Unknown"
-  echo   }
-  echo } else {
-  echo   $a=$primary.NetAdapter
-  echo   $ipv4 = ($primary.IPv4Address ^| Where-Object {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} ^| Select-Object -First 1 -ExpandProperty IPAddress)
-  echo   $ipv6 = ($primary.IPv6Address ^| Select-Object -First 1 -ExpandProperty IPAddress)
-  echo   $gw = ($primary.IPv4DefaultGateway ^| Select-Object -First 1 -ExpandProperty NextHop)
-  echo   $dns = ($primary.DNSServer.ServerAddresses -join ',')
-  echo   $profile = Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex
-  echo   $dhcp = (Get-NetIPInterface -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4).Dhcp
-  echo   "PRIMARY|$($a.Name)|$($a.InterfaceAlias)|$($a.InterfaceDescription)|$($a.InterfaceIndex)|$($a.MacAddress)|$ipv4|$ipv6|$gw|$dns|$dhcp|$($profile.NetworkCategory)|$($a.LinkSpeed)"
-  echo }
-  echo $i=0
-  echo $all ^| ForEach-Object {
-  echo   $i++
-  echo   $a=$_.NetAdapter
-  echo   if($a){
-  echo     $ipv4s = ($_.IPv4Address ^| Select-Object -ExpandProperty IPAddress) -join ','
-  echo     $ipv6s = ($_.IPv6Address ^| Select-Object -ExpandProperty IPAddress) -join ','
-  echo     $gw = ($_.IPv4DefaultGateway ^| Select-Object -ExpandProperty NextHop) -join ','
-  echo     "ADAPTER|$i|$($a.Name)|$($a.InterfaceAlias)|$($a.InterfaceDescription)|$($a.InterfaceIndex)|$($a.Status)|$($a.MacAddress)|$ipv4s|$ipv6s|$gw|$($a.LinkSpeed)"
-  echo   }
-  echo }
-) > "%PSNET%"
-
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PSNET%" > "%PSOUT%" 2>nul
+set "PSNETOUT=%TEMP%\net_inventory_%RANDOM%.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue';$all=Get-NetIPConfiguration|?{$_.NetAdapter};$usable=$all|?{$_.NetAdapter.Status -eq 'Up' -and $_.IPv4Address.IPAddress -and $_.IPv4Address.IPAddress -notlike '169.254*' -and $_.IPv4Address.IPAddress -ne '127.0.0.1'};$ranked=$usable|Sort-Object @{Expression={if($_.IPv4DefaultGateway.NextHop){0}else{1}}},@{Expression={if($_.NetAdapter.InterfaceDescription -match 'Hyper-V|Virtual|VMware|VirtualBox|VPN|TAP|TUN|Bluetooth|Wi-Fi Direct|Loopback|Teredo'){1}else{0}}},InterfaceIndex;$p=$ranked|Select-Object -First 1;if(-not $p){$f=Get-CimInstance Win32_NetworkAdapterConfiguration|?{$_.IPEnabled -eq $true -and $_.IPAddress -and $_.MACAddress}|Select-Object -First 1;if($f){$ipv4=($f.IPAddress|?{$_ -match '^\d+\.' -and $_ -notlike '169.254*'}|select -first 1);if(-not $ipv4){$ipv4='Unavailable'};"PRIMARY|$($f.Description)|$($f.Description)|$($f.Description)|$($f.InterfaceIndex)|$($f.MACAddress)|$ipv4|Unavailable|$($f.DefaultIPGateway -join ',')|$($f.DNSServerSearchOrder -join ',')|Unknown|Unknown|Unknown"}else{"PRIMARY|Unknown|Unknown|Unknown|Unknown|Unavailable|Unavailable|Unavailable|Unavailable|Unavailable|Unknown|Unknown|Unknown"}} else {$a=$p.NetAdapter;$ipv4=($p.IPv4Address|?{$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'}|select -first 1 -ExpandProperty IPAddress);$ipv6=($p.IPv6Address|select -first 1 -ExpandProperty IPAddress);$gw=($p.IPv4DefaultGateway|select -first 1 -ExpandProperty NextHop);$dns=($p.DNSServer.ServerAddresses -join ',');$profile=Get-NetConnectionProfile -InterfaceIndex $a.InterfaceIndex;$dhcp=(Get-NetIPInterface -InterfaceIndex $a.InterfaceIndex -AddressFamily IPv4).Dhcp;"PRIMARY|$($a.Name)|$($a.InterfaceAlias)|$($a.InterfaceDescription)|$($a.InterfaceIndex)|$($a.MacAddress)|$ipv4|$ipv6|$gw|$dns|$dhcp|$($profile.NetworkCategory)|$($a.LinkSpeed)"};$i=0;$all|%{$i++;$a=$_.NetAdapter;if($a){$ipv4s=($_.IPv4Address|select -ExpandProperty IPAddress)-join ',';$ipv6s=($_.IPv6Address|select -ExpandProperty IPAddress)-join ',';$gw=($_.IPv4DefaultGateway|select -ExpandProperty NextHop)-join ',';"ADAPTER|$i|$($a.Name)|$($a.InterfaceAlias)|$($a.InterfaceDescription)|$($a.InterfaceIndex)|$($a.Status)|$($a.MacAddress)|$ipv4s|$ipv6s|$gw|$($a.LinkSpeed)"}}" > "%PSNETOUT%" 2>nul
 
 if "%DEBUG_NETWORK%"=="1" (
-  call :log "[DEBUG-NETWORK] Raw PowerShell network output:"
-  for /f "usebackq delims=" %%L in ("%PSOUT%") do (call :log "[DEBUG-NETWORK] %%L")
+  call :log "[DEBUG-NETWORK] Raw network output:"
+  for /f "usebackq delims=" %%L in ("%PSNETOUT%") do call :log "[DEBUG-NETWORK] %%L"
 )
 
-for /f "usebackq tokens=1-13 delims=|" %%A in ("%PSOUT%") do (
+for /f "usebackq tokens=1-13 delims=|" %%A in ("%PSNETOUT%") do (
   if /I "%%A"=="PRIMARY" (
     set "NET_NAME=%%B"
     set "NET_ALIAS=%%C"
@@ -190,11 +149,8 @@ for /f "usebackq tokens=1-13 delims=|" %%A in ("%PSOUT%") do (
     set "NETWORK_CATEGORY=%%L"
     set "LINK_SPEED=%%M"
   )
-  if /I "%%A"=="ADAPTER" (
-    call :log "Adapter %%B: Name=%%C Alias=%%D Status=%%G MAC=%%H IPv4=%%I GW=%%K"
-  )
+  if /I "%%A"=="ADAPTER" call :log "Adapter %%B: Name=%%C Alias=%%D Status=%%G MAC=%%H IPv4=%%I GW=%%K"
 )
-
 if "%IPV4%"=="" set "IPV4=Unavailable"
 if "%MAC%"=="" set "MAC=Unavailable"
 
@@ -212,9 +168,7 @@ call :log "DNS Servers: %DNS_SERVERS%"
 call :log "DHCP: %DHCP_STATUS%"
 call :log "Network Category: %NETWORK_CATEGORY%"
 call :log "Link Speed: %LINK_SPEED%"
-
-if exist "%PSNET%" del /q "%PSNET%" >nul 2>&1
-if exist "%PSOUT%" del /q "%PSOUT%" >nul 2>&1
+if exist "%PSNETOUT%" del /q "%PSNETOUT%" >nul 2>&1
 exit /b
 
 :run_checks
@@ -225,7 +179,6 @@ for /f "tokens=3" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\Current
 if not defined CURBUILD set "CURBUILD=0"
 if %CURBUILD% GEQ 22000 (set "%PFX%_OSBuild=PASS") else (set "%PFX%_OSBuild=CRITICAL")
 call :log "RESULT [PASS/FAIL]: OS Build Status=!%PFX%_OSBuild!"
-
 call :step 2 7 "Running SFC /verifyonly"
 call :run_long "SFC /verifyonly" "sfc /verifyonly" "%TEMP%\integrity_sfc_%PFX%.log"
 type "%TEMP%\integrity_sfc_%PFX%.log" >> "%REPORT%"
@@ -233,7 +186,6 @@ find /i "did not find any integrity violations" "%TEMP%\integrity_sfc_%PFX%.log"
 if not defined %PFX%_SFC (find /i "found integrity violations" "%TEMP%\integrity_sfc_%PFX%.log" >nul && set "%PFX%_SFC=FAIL")
 if not defined %PFX%_SFC set "%PFX%_SFC=WARNING"
 call :log "RESULT [PASS/FAIL]: SFC Verify Status=!%PFX%_SFC!"
-
 call :step 3 7 "Running DISM /CheckHealth"
 call :run_long "DISM /CheckHealth" "DISM /Online /Cleanup-Image /CheckHealth" "%TEMP%\integrity_dism_%PFX%.log"
 type "%TEMP%\integrity_dism_%PFX%.log" >> "%REPORT%"
@@ -241,24 +193,20 @@ find /i "No component store corruption detected" "%TEMP%\integrity_dism_%PFX%.lo
 if not defined %PFX%_DISM (find /i "component store is repairable" "%TEMP%\integrity_dism_%PFX%.log" >nul && set "%PFX%_DISM=FAIL")
 if not defined %PFX%_DISM set "%PFX%_DISM=WARNING"
 call :log "RESULT [PASS/FAIL]: DISM CheckHealth Status=!%PFX%_DISM!"
-
 call :step 4 7 "Checking boot configuration"
 bcdedit /enum {current} > "%TEMP%\integrity_bcd_%PFX%.log" 2>&1
 type "%TEMP%\integrity_bcd_%PFX%.log" >> "%REPORT%"
 if errorlevel 1 (set "%PFX%_BOOT=CRITICAL") else (set "%PFX%_BOOT=PASS")
 call :log "RESULT [PASS/FAIL]: Boot Config Status=!%PFX%_BOOT!"
-
 call :step 5 7 "Running CHKDSK scan"
 call :run_long "CHKDSK /scan" "chkdsk %SystemDrive% /scan" "%TEMP%\integrity_chkdsk_%PFX%.log"
 type "%TEMP%\integrity_chkdsk_%PFX%.log" >> "%REPORT%"
 find /i "found no problems" "%TEMP%\integrity_chkdsk_%PFX%.log" >nul && set "%PFX%_CHKDSK=PASS"
 if not defined %PFX%_CHKDSK set "%PFX%_CHKDSK=WARNING"
 call :log "RESULT [PASS/FAIL]: CHKDSK Status=!%PFX%_CHKDSK!"
-
 call :step 6 7 "Checking CBS log presence"
 if exist "%windir%\Logs\CBS\CBS.log" (set "%PFX%_CBS=PASS") else (set "%PFX%_CBS=WARNING")
 call :log "RESULT [PASS/FAIL]: CBS Log Status=!%PFX%_CBS!"
-
 call :step 7 7 "Checking system drive free space"
 call :check_free_space %PFX%
 exit /b
