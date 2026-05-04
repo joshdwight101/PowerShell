@@ -23,6 +23,11 @@
 - Restored verbose step-by-step console progress in PowerShell and CMD scripts (check phase and repair phase).
 - Added clear `[step/total]` progress markers and stage descriptions for better operator visibility.
 
+## v1.6.2
+- Expanded script verbosity with explicit `RESULT [PASS/FAIL]` log lines for each step.
+- Ensured pending reboot handling prompts interactive users to reboot now while keeping silent-mode auto reboot behavior.
+- Preserved full date+time timestamps on all console/report log entries.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

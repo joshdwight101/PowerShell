@@ -22,7 +22,18 @@ if defined NEEDREPAIR (
 call :pending_reboot
 if "%PENDING_REBOOT%"=="1" (
   call :log "Pending reboot detected after checks/repairs."
-  if "%SILENT%"=="1" shutdown /r /f /t 0
+  if "%SILENT%"=="1" (
+    call :log "Silent mode: rebooting immediately."
+    shutdown /r /f /t 0
+  ) else (
+    choice /C YN /N /M "Pending reboot exists. Restart now? [Y/N]: "
+    if errorlevel 2 (
+      call :log "User declined reboot; report will indicate reboot pending."
+    ) else (
+      call :log "User approved reboot. Restarting now..."
+      shutdown /r /f /t 0
+    )
+  )
 )
 
 set /a SCORE=0
@@ -37,6 +48,7 @@ call :step 1 7 "Checking OS build baseline..."
 for /f "tokens=3" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuild ^| find "CurrentBuild"') do set BUILD=%%A
 if !BUILD! GEQ 22000 (set %PFX%_OSBuild=PASS) else (set %PFX%_OSBuild=CRITICAL)
 call :log "OS Build => !%PFX%_OSBuild!"
+call :log "RESULT [PASS/FAIL]: OS Build validation completed. Status=!%PFX%_OSBuild!"
 
 call :step 2 7 "Running SFC /verifyonly (can take several minutes)..."
 sfc /verifyonly > "%TEMP%\sfc_v.log"
@@ -44,6 +56,7 @@ find /i "did not find any integrity violations" "%TEMP%\sfc_v.log" >nul && set %
 if not defined %PFX%_SFC (find /i "found integrity violations" "%TEMP%\sfc_v.log" >nul && set %PFX%_SFC=FAIL)
 if not defined %PFX%_SFC set %PFX%_SFC=WARNING
 call :log "SFC Verify => !%PFX%_SFC!"
+call :log "RESULT [PASS/FAIL]: SFC verify completed. Status=!%PFX%_SFC!"
 
 call :step 3 7 "Running DISM /CheckHealth..."
 DISM /Online /Cleanup-Image /CheckHealth > "%TEMP%\dism_c.log"
@@ -51,24 +64,29 @@ find /i "No component store corruption detected" "%TEMP%\dism_c.log" >nul && set
 if not defined %PFX%_DISM (find /i "component store is repairable" "%TEMP%\dism_c.log" >nul && set %PFX%_DISM=FAIL)
 if not defined %PFX%_DISM set %PFX%_DISM=WARNING
 call :log "DISM CheckHealth => !%PFX%_DISM!"
+call :log "RESULT [PASS/FAIL]: DISM CheckHealth completed. Status=!%PFX%_DISM!"
 
 call :step 4 7 "Checking Boot Configuration Data (BCD)..."
 bcdedit /enum {current} >nul 2>&1 && set %PFX%_Boot=PASS || set %PFX%_Boot=CRITICAL
 call :log "Boot Config => !%PFX%_Boot!"
+call :log "RESULT [PASS/FAIL]: Boot configuration check completed. Status=!%PFX%_Boot!"
 
 call :step 5 7 "Running CHKDSK online scan..."
 chkdsk %SystemDrive% /scan > "%TEMP%\chk.log"
 find /i "found no problems" "%TEMP%\chk.log" >nul && set %PFX%_CHKDSK=PASS || set %PFX%_CHKDSK=WARNING
 call :log "CHKDSK => !%PFX%_CHKDSK!"
+call :log "RESULT [PASS/FAIL]: CHKDSK scan completed. Status=!%PFX%_CHKDSK!"
 
 call :step 6 7 "Checking CBS servicing log presence..."
 if exist "%windir%\Logs\CBS\CBS.log" (set %PFX%_CBS=PASS) else (set %PFX%_CBS=WARNING)
 call :log "CBS Log => !%PFX%_CBS!"
+call :log "RESULT [PASS/FAIL]: CBS log presence check completed. Status=!%PFX%_CBS!"
 call :step 7 7 "Checking free space threshold (>=20GB)..."
 for /f "tokens=3" %%A in ('dir %SystemDrive% ^| find "bytes free"') do set FREE=%%A
 set FREE=!FREE:,=!
 if !FREE! GEQ 21474836480 (set %PFX%_FreeSpace=PASS) else (set %PFX%_FreeSpace=FAIL)
 call :log "Free Space => !%PFX%_FreeSpace!"
+call :log "RESULT [PASS/FAIL]: Free space threshold check completed. Status=!%PFX%_FreeSpace!"
 exit /b
 
 :repair

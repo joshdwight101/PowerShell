@@ -19,36 +19,36 @@ function Run-Checks {
     Step 1 7 'Checking OS build baseline...'
     $build=[int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuild
     $r.OSBuild= if($build -ge 22000){'PASS'}else{'CRITICAL'}
-    Log "OS Build: $build => $($r.OSBuild)"
+    Log "RESULT [PASS/FAIL]: OS Build validation completed. Build=$build Status=$($r.OSBuild)"
 
     Step 2 7 'Running SFC /verifyonly (can take several minutes)...'
     $sfc=cmd /c 'sfc /verifyonly'|Out-String
     $r.SFC= if($sfc -match 'did not find any integrity violations'){'PASS'}elseif($sfc -match 'found integrity violations'){'FAIL'}else{'WARNING'}
-    Log "SFC Verify => $($r.SFC)"
+    Log "RESULT [PASS/FAIL]: SFC verify completed. Status=$($r.SFC)"
 
     Step 3 7 'Running DISM /CheckHealth...'
     $dism=cmd /c 'DISM /Online /Cleanup-Image /CheckHealth'|Out-String
     $r.DISM= if($dism -match 'No component store corruption detected'){'PASS'}elseif($dism -match 'component store is repairable'){'FAIL'}else{'WARNING'}
-    Log "DISM CheckHealth => $($r.DISM)"
+    Log "RESULT [PASS/FAIL]: DISM CheckHealth completed. Status=$($r.DISM)"
 
     Step 4 7 'Checking Boot Configuration Data (BCD)...'
     cmd /c 'bcdedit /enum {current}' >$null 2>&1
     $r.Boot= if($LASTEXITCODE -eq 0){'PASS'}else{'CRITICAL'}
-    Log "Boot Config => $($r.Boot)"
+    Log "RESULT [PASS/FAIL]: Boot configuration check completed. Status=$($r.Boot)"
 
     Step 5 7 'Running CHKDSK online scan...'
     $chk=cmd /c "chkdsk $env:SystemDrive /scan"|Out-String
     $r.CHKDSK= if($chk -match 'found no problems'){'PASS'}else{'WARNING'}
-    Log "CHKDSK => $($r.CHKDSK)"
+    Log "RESULT [PASS/FAIL]: CHKDSK scan completed. Status=$($r.CHKDSK)"
 
     Step 6 7 'Checking CBS servicing log presence...'
     $r.CBS= if(Test-Path "$env:windir\Logs\CBS\CBS.log"){'PASS'}else{'WARNING'}
-    Log "CBS Log => $($r.CBS)"
+    Log "RESULT [PASS/FAIL]: CBS log presence check completed. Status=$($r.CBS)"
 
     Step 7 7 'Checking free space threshold (>=20GB)...'
     $free=(Get-PSDrive -Name $env:SystemDrive.TrimEnd(':')).Free
     $r.FreeSpace= if($free -ge 20GB){'PASS'}else{'FAIL'}
-    Log "Free Space => $($r.FreeSpace)"
+    Log "RESULT [PASS/FAIL]: Free space threshold check completed. Status=$($r.FreeSpace)"
     return $r
 }
 
@@ -68,7 +68,13 @@ $first=Run-Checks
 $firstFail=$first.Values | Where-Object {$_ -ne 'PASS'}
 if($firstFail){ Repair-Issues $first; Log '--- Recheck after repair ---'; $final=Run-Checks } else { $final=$first }
 
-if(PendingReboot){ Log 'Pending reboot detected after checks/repairs.'; if($Silent){shutdown /r /f /t 0; exit 0} }
+if(PendingReboot){
+    Log 'Pending reboot detected after checks/repairs.'
+    if($Silent){ Log 'Silent mode: rebooting immediately.'; shutdown /r /f /t 0; exit 0 }
+    $choice=Read-Host 'Pending reboot exists. Reboot now? (Y/N)'
+    if($choice -match '^(Y|y)$'){ Log 'User approved reboot. Rebooting now...'; shutdown /r /f /t 0; exit 0 }
+    Log 'User declined reboot; report will indicate reboot pending.'
+}
 $score=($final.Values|ForEach-Object{Score $_}|Measure-Object -Sum).Sum
 $overall= if($score -ge 6){'OVERALL: REINSTALL RECOMMENDED'}elseif($score -ge 3){'OVERALL: REPAIR INSTALL RECOMMENDED'}else{'OVERALL: HEALTHY/REPAIRED'}
 Log $overall
