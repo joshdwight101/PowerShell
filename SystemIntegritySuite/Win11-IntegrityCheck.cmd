@@ -7,18 +7,7 @@ net session >nul 2>&1 || (powershell -NoProfile -ExecutionPolicy Bypass -WindowS
 set "REPORT=%~dp0Win11_IntegrityReport_%date:~10,4%%date:~4,2%%date:~7,2%_%time:~0,2%%time:~3,2%%time:~6,2%.log"
 set "REPORT=%REPORT: =0%"
 call :log "Windows 11 Integrity Check + Auto Repair"
-set "SERIAL=Unknown"
-set "MFG=Unknown"
-set "MODEL=Unknown"
-set "OSVER=Unknown"
-set "IP=Unknown"
-set "MAC=Unknown"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_BIOS).SerialNumber"`) do set "SERIAL=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Manufacturer"`) do set "MFG=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Model"`) do set "MODEL=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).Version"`) do set "OSVER=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 ^| ? {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} ^| select -First 1 -ExpandProperty IPAddress)"`) do set "IP=%%A"
-for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetAdapter ^| ? Status -eq Up ^| select -First 1 -ExpandProperty MacAddress)"`) do set "MAC=%%A"
+call :collect_metadata
 call :log "Host: %COMPUTERNAME% | Serial: %SERIAL% | Manufacturer: %MFG% | Model: %MODEL%"
 call :log "IP: %IP% | MAC: %MAC% | Windows Version: %OSVER%"
 call :log "Run start time: %date% %time%"
@@ -144,4 +133,36 @@ exit /b
 
 :step
 call :log "[%~1/%~2] %~3"
+exit /b
+
+:collect_metadata
+set "SERIAL=Unknown"
+set "MFG=Unknown"
+set "MODEL=Unknown"
+set "OSVER=Unknown"
+set "IP=Unknown"
+set "MAC=Unknown"
+set "META_TMP=%TEMP%\integrity_meta_%RANDOM%.txt"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='SilentlyContinue';" ^
+  "$cs=Get-CimInstance Win32_ComputerSystem;" ^
+  "$bios=Get-CimInstance Win32_BIOS;" ^
+  "$os=Get-CimInstance Win32_OperatingSystem;" ^
+  "$ip=(Get-NetIPAddress -AddressFamily IPv4 | ? {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} | select -First 1 -ExpandProperty IPAddress);" ^
+  "$mac=(Get-NetAdapter | ? Status -eq 'Up' | select -First 1 -ExpandProperty MacAddress);" ^
+  "'SERIAL=' + $bios.SerialNumber;" ^
+  "'MFG=' + $cs.Manufacturer;" ^
+  "'MODEL=' + $cs.Model;" ^
+  "'OSVER=' + $os.Version;" ^
+  "'IP=' + $ip;" ^
+  "'MAC=' + $mac" > "%META_TMP%" 2>nul
+for /f "usebackq tokens=1,* delims==" %%K in ("%META_TMP%") do (
+  if /I "%%K"=="SERIAL" set "SERIAL=%%L"
+  if /I "%%K"=="MFG" set "MFG=%%L"
+  if /I "%%K"=="MODEL" set "MODEL=%%L"
+  if /I "%%K"=="OSVER" set "OSVER=%%L"
+  if /I "%%K"=="IP" set "IP=%%L"
+  if /I "%%K"=="MAC" set "MAC=%%L"
+)
+if exist "%META_TMP%" del "%META_TMP%" >nul 2>&1
 exit /b

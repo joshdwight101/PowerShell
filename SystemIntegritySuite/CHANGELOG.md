@@ -37,6 +37,10 @@
 - Fixed CMD startup reliability by replacing fragile WMIC/getmac parsing with PowerShell CIM/network queries.
 - Removed `goto`-style metadata parsing blocks that could fail early on some systems.
 
+## v1.6.5
+- Hardened CMD startup further by moving metadata collection into a fault-tolerant subroutine with temp-file parsing.
+- Added safe defaults and error-tolerant PowerShell metadata export to prevent premature script termination.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.
