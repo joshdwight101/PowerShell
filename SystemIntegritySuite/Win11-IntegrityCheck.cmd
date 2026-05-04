@@ -146,7 +146,7 @@ if %CURBUILD% GEQ 22000 (set "%PFX%_OSBuild=PASS") else (set "%PFX%_OSBuild=CRIT
 call :log "RESULT [PASS/FAIL]: OS Build Status=!%PFX%_OSBuild! (Build=%CURBUILD%)"
 
 call :step 2 7 "Running SFC /verifyonly"
-sfc /verifyonly > "%TEMP%\integrity_sfc_%PFX%.log" 2>&1
+call :run_long "SFC /verifyonly" "sfc /verifyonly" "%TEMP%\integrity_sfc_%PFX%.log"
 type "%TEMP%\integrity_sfc_%PFX%.log" >> "%REPORT%"
 find /i "did not find any integrity violations" "%TEMP%\integrity_sfc_%PFX%.log" >nul && set "%PFX%_SFC=PASS"
 if not defined %PFX%_SFC (find /i "found integrity violations" "%TEMP%\integrity_sfc_%PFX%.log" >nul && set "%PFX%_SFC=FAIL")
@@ -154,7 +154,7 @@ if not defined %PFX%_SFC set "%PFX%_SFC=WARNING"
 call :log "RESULT [PASS/FAIL]: SFC Verify Status=!%PFX%_SFC!"
 
 call :step 3 7 "Running DISM /CheckHealth"
-DISM /Online /Cleanup-Image /CheckHealth > "%TEMP%\integrity_dism_%PFX%.log" 2>&1
+call :run_long "DISM /CheckHealth" "DISM /Online /Cleanup-Image /CheckHealth" "%TEMP%\integrity_dism_%PFX%.log"
 type "%TEMP%\integrity_dism_%PFX%.log" >> "%REPORT%"
 find /i "No component store corruption detected" "%TEMP%\integrity_dism_%PFX%.log" >nul && set "%PFX%_DISM=PASS"
 if not defined %PFX%_DISM (find /i "component store is repairable" "%TEMP%\integrity_dism_%PFX%.log" >nul && set "%PFX%_DISM=FAIL")
@@ -168,7 +168,7 @@ if errorlevel 1 (set "%PFX%_BOOT=CRITICAL") else (set "%PFX%_BOOT=PASS")
 call :log "RESULT [PASS/FAIL]: Boot Config Status=!%PFX%_BOOT!"
 
 call :step 5 7 "Running CHKDSK scan"
-chkdsk %SystemDrive% /scan > "%TEMP%\integrity_chkdsk_%PFX%.log" 2>&1
+call :run_long "CHKDSK /scan" "chkdsk %SystemDrive% /scan" "%TEMP%\integrity_chkdsk_%PFX%.log"
 type "%TEMP%\integrity_chkdsk_%PFX%.log" >> "%REPORT%"
 find /i "found no problems" "%TEMP%\integrity_chkdsk_%PFX%.log" >nul && set "%PFX%_CHKDSK=PASS"
 if not defined %PFX%_CHKDSK set "%PFX%_CHKDSK=WARNING"
@@ -200,15 +200,18 @@ set "PFX=%~1"
 call :log "--- Repair phase started ---"
 if /I not "!%PFX%_DISM!"=="PASS" (
   call :step 1 5 "Repair: DISM /RestoreHealth"
-  DISM /Online /Cleanup-Image /RestoreHealth >> "%REPORT%" 2>&1
+  call :run_long "DISM /RestoreHealth" "DISM /Online /Cleanup-Image /RestoreHealth" "%TEMP%\integrity_dism_restore.log"
+  type "%TEMP%\integrity_dism_restore.log" >> "%REPORT%"
 )
 if /I not "!%PFX%_SFC!"=="PASS" (
   call :step 2 5 "Repair: SFC /scannow"
-  sfc /scannow >> "%REPORT%" 2>&1
+  call :run_long "SFC /scannow" "sfc /scannow" "%TEMP%\integrity_sfc_scannow.log"
+  type "%TEMP%\integrity_sfc_scannow.log" >> "%REPORT%"
 )
 if /I not "!%PFX%_CHKDSK!"=="PASS" (
   call :step 3 5 "Repair: CHKDSK re-scan"
-  chkdsk %SystemDrive% /scan >> "%REPORT%" 2>&1
+  call :run_long "CHKDSK repair /scan" "chkdsk %SystemDrive% /scan" "%TEMP%\integrity_chkdsk_repair.log"
+  type "%TEMP%\integrity_chkdsk_repair.log" >> "%REPORT%"
 )
 if "%SKIP_WU_RESET%"=="0" (
   if /I not "!%PFX%_DISM!"=="PASS" (
@@ -308,6 +311,31 @@ exit /b
 
 :reset_results
 for %%V in (OSBuild SFC DISM BOOT CHKDSK CBS FREESPACE) do set "%~1_%%V="
+exit /b
+
+:run_long
+setlocal EnableDelayedExpansion
+set "TASKNAME=%~1"
+set "COMMAND=%~2"
+set "OUTFILE=%~3"
+set "LOCKFILE=%TEMP%\integrity_lock_%RANDOM%.lck"
+set "RCFILE=%TEMP%\integrity_rc_%RANDOM%.txt"
+if exist "!OUTFILE!" del /q "!OUTFILE!" >nul 2>&1
+call :log "START: !TASKNAME!"
+start "" /b cmd /v:on /c "(echo running>\"!LOCKFILE!\" & !COMMAND! >\"!OUTFILE!\" 2>&1 & echo !errorlevel!>\"!RCFILE!\" & del /q \"!LOCKFILE!\" >nul 2>&1)"
+set /a ELAPSED=0
+:run_long_wait
+if exist "!LOCKFILE!" (
+  set /a ELAPSED+=5
+  if "%SILENT%"=="0" echo [!date! !time!] ... !TASKNAME! in progress (!ELAPSED!s elapsed)
+  timeout /t 5 /nobreak >nul
+  goto run_long_wait
+)
+set "RC=1"
+if exist "!RCFILE!" set /p RC=<"!RCFILE!"
+if exist "!RCFILE!" del /q "!RCFILE!" >nul 2>&1
+call :log "END: !TASKNAME! exit code=!RC! elapsed=!ELAPSED!s"
+endlocal & set "RUN_LONG_RC=%RC%"
 exit /b
 
 :step

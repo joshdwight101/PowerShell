@@ -59,6 +59,10 @@
 - Added reliable argument handling (`-silent`, `-force`, `-deep`, `-no-reboot`, `-reset-wu`, `-reset-network`, `-skip-wu-reset`, `-help`).
 - Added robust detect -> repair -> recheck workflow with verbose step/status logging and safer reboot behavior.
 
+## v2.0.1
+- Added non-freezing long-command execution wrapper with live elapsed progress for DISM/SFC/CHKDSK stages.
+- Improved operator visibility during long repairs (especially `DISM /RestoreHealth`) with start/end and periodic status output.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.
