@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$OutputPath = ".\Win11_IntegrityReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').log",
-    [switch]$Silent
+    [switch]$Silent,
+    [switch]$JsonReport,
+    [string]$JsonReportPath = ".\Win11_IntegrityReport_$(Get-Date -Format 'yyyyMMdd_HHmmss').json"
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -13,6 +15,38 @@ function Log([string]$m){$l="[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] $m"
 function Step([int]$i,[int]$t,[string]$m){ Log ("[{0}/{1}] {2}" -f $i,$t,$m) }
 function Score([string]$s){switch($s){'PASS'{0};'WARNING'{1};'FAIL'{2};'CRITICAL'{3};default{1}}}
 function PendingReboot{ (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired') -or ((Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager' -EA SilentlyContinue).PendingFileRenameOperations -ne $null) }
+function Get-ComputerInventory {
+    $unknown='Unknown'
+    try{$os=Get-CimInstance Win32_OperatingSystem}catch{$os=$null}
+    try{$cs=Get-CimInstance Win32_ComputerSystem}catch{$cs=$null}
+    try{$bios=Get-CimInstance Win32_BIOS}catch{$bios=$null}
+    try{$cpu=Get-CimInstance Win32_Processor|Select-Object -First 1}catch{$cpu=$null}
+    try{$enc=Get-CimInstance Win32_SystemEnclosure|Select-Object -First 1}catch{$enc=$null}
+    try{$cv=Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'}catch{$cv=$null}
+    try{$adapters=Get-NetAdapter|Where-Object Status -eq Up}catch{$adapters=@()}
+    $net=@()
+    foreach($a in $adapters){
+        try{$cfg=Get-NetIPConfiguration -InterfaceIndex $a.ifIndex}catch{$cfg=$null}
+        $prof=$null; try{$prof=Get-NetConnectionProfile -InterfaceIndex $a.ifIndex}catch{}
+        $net+=[pscustomobject]@{Name=$a.Name;InterfaceAlias=$a.InterfaceAlias;InterfaceDesc=$a.InterfaceDescription;MacAddress=$a.MacAddress;LinkSpeed=$a.LinkSpeed;Status=$a.Status;IPv4Address=@($cfg.IPv4Address.IPAddress);IPv6Address=@($cfg.IPv6Address.IPAddress);DefaultGateway=@($cfg.IPv4DefaultGateway.NextHop);DnsServers=@($cfg.DNSServer.ServerAddresses);DhcpEnabled=$cfg.NetIPv4Interface.Dhcp;DhcpServer=$null;ConnectionProfileName=$prof.Name;NetworkCategory=$prof.NetworkCategory}
+    }
+    try{$disks=Get-PhysicalDisk}catch{$disks=@()}
+    $diskObjs=$disks|ForEach-Object{[pscustomobject]@{Model=$_.FriendlyName;SerialNumber=$_.SerialNumber;BusType=$_.BusType;MediaType=$_.MediaType;HealthStatus=$_.HealthStatus}}
+    $sysDrive="$($env:SystemDrive)\"
+    try{$d=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'" }catch{$d=$null}
+    $systemDrive=[pscustomobject]@{DriveLetter=$env:SystemDrive;TotalGB=if($d){[math]::Round($d.Size/1GB,2)}else{$null};FreeGB=if($d){[math]::Round($d.FreeSpace/1GB,2)}else{$null}}
+    $lastBoot=if($os){[System.Management.ManagementDateTimeConverter]::ToDateTime($os.LastBootUpTime)}else{$null}
+    $installDate=if($os){[System.Management.ManagementDateTimeConverter]::ToDateTime($os.InstallDate)}else{$null}
+    $uptime=if($lastBoot){(Get-Date)-$lastBoot}else{$null}
+    [pscustomobject]@{
+        CollectedAt=Get-Date; HostName=$env:COMPUTERNAME; Fqdn=([System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName); LoggedOnUser=([Security.Principal.WindowsIdentity]::GetCurrent().Name); DomainOrWorkgroup=if($cs){if($cs.PartOfDomain){$cs.Domain}else{$cs.Workgroup}}else{$unknown};
+        Manufacturer=if($cs){$cs.Manufacturer}else{$unknown}; Model=if($cs){$cs.Model}else{$unknown}; SerialNumber=if($bios){$bios.SerialNumber}else{$unknown}; BiosVersion=if($bios){($bios.SMBIOSBIOSVersion -join ',')}else{$unknown}; BiosReleaseDate=if($bios){$bios.ReleaseDate}else{$null}; SystemSku=if($cs){$cs.SystemSKUNumber}else{$null}; ChassisType=if($enc){$enc.ChassisTypes -join ','}else{$null};
+        WindowsProductName=$cv.ProductName; WindowsEdition=$cv.EditionID; WindowsVersion=if($cv.DisplayVersion){$cv.DisplayVersion}else{$cv.ReleaseId}; WindowsBuild=$cv.CurrentBuild; WindowsUBR=$cv.UBR; FullBuild="$($cv.CurrentBuild).$($cv.UBR)"; OsArchitecture=if($os){$os.OSArchitecture}else{$unknown}; InstallDate=$installDate; LastBootTime=$lastBoot; Uptime=$uptime;
+        PowerShellVersion=$PSVersionTable.PSVersion.ToString(); ExecutionPolicy=(Get-ExecutionPolicy -List|Out-String).Trim();
+        ProcessorName=if($cpu){$cpu.Name}else{$unknown}; PhysicalCores=if($cpu){$cpu.NumberOfCores}else{$null}; LogicalProcessors=if($cpu){$cpu.NumberOfLogicalProcessors}else{$null}; TotalMemoryGB=if($cs){[math]::Round($cs.TotalPhysicalMemory/1GB,2)}else{$null};
+        NetworkAdapters=$net; Disks=$diskObjs; SystemDrive=$systemDrive; TpmStatus=(Get-Tpm -EA SilentlyContinue | Select-Object -Property TpmPresent,TpmReady,TpmEnabled -EA SilentlyContinue); SecureBootEnabled=(Confirm-SecureBootUEFI -EA SilentlyContinue); BitLockerStatus=(Get-BitLockerVolume -MountPoint $env:SystemDrive -EA SilentlyContinue | Select-Object -Property ProtectionStatus,VolumeStatus)
+    }
+}
 
 function Run-Checks {
     $r=@{}
@@ -63,15 +97,22 @@ function Repair-Issues($res){
 }
 
 Log 'Windows 11 Integrity Check + Auto Repair'
-$cs = Get-CimInstance Win32_ComputerSystem
-$bios = Get-CimInstance Win32_BIOS
-$os = Get-CimInstance Win32_OperatingSystem
-$adp = Get-NetAdapter | Where-Object Status -eq Up | Select-Object -First 1
-$ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1' } | Select-Object -ExpandProperty IPAddress -First 1)
-Log "Host: $env:COMPUTERNAME | User: $([Security.Principal.WindowsIdentity]::GetCurrent().Name)"
-Log "Serial: $($bios.SerialNumber) | Manufacturer: $($cs.Manufacturer) | Model: $($cs.Model)"
-Log "IP: $ip | MAC: $($adp.MacAddress)"
-Log "OS: $($os.Caption) | Version: $($os.Version) | Build: $($os.BuildNumber)"
+ $inventory = Get-ComputerInventory
+Log 'Computer Inventory'
+Log '------------------'
+Log ("Host Name: {0}" -f $inventory.HostName)
+Log ("Manufacturer: {0}" -f $inventory.Manufacturer)
+Log ("Model: {0}" -f $inventory.Model)
+Log ("Serial Number: {0}" -f $inventory.SerialNumber)
+Log ("Windows: {0} {1}" -f $inventory.WindowsProductName,$inventory.WindowsVersion)
+Log ("Build: {0}" -f $inventory.FullBuild)
+Log ("Architecture: {0}" -f $inventory.OsArchitecture)
+Log ("Last Boot: {0}" -f $inventory.LastBootTime)
+Log ("Uptime: {0}" -f $inventory.Uptime)
+Log ("Logged On User: {0}" -f $inventory.LoggedOnUser)
+Log ("Primary IPv4: {0}" -f ($inventory.NetworkAdapters | Select-Object -First 1).IPv4Address[0])
+Log ("MAC Address: {0}" -f ($inventory.NetworkAdapters | Select-Object -First 1).MacAddress)
+Log ("System Drive: {0} {1} GB total / {2} GB free" -f $inventory.SystemDrive.DriveLetter,$inventory.SystemDrive.TotalGB,$inventory.SystemDrive.FreeGB)
 Log "Run start time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
 $phaseStart=Get-Date
 $first=Run-Checks
@@ -103,3 +144,8 @@ else { Log 'SUGGESTION: System appears repaired/healthy; continue monitoring eve
 Log "Run end time: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')"
 $lines|Set-Content $OutputPath -Encoding UTF8
 if(-not $Silent){Get-Content $OutputPath; Start-Process notepad $OutputPath}
+if($JsonReport){
+    $payload=[pscustomobject]@{GeneratedAt=Get-Date;ComputerInventory=$inventory;FinalResults=$final;Overall=$overall}
+    $payload|ConvertTo-Json -Depth 8|Set-Content -Encoding UTF8 $JsonReportPath
+    Log "JSON report saved to $JsonReportPath"
+}

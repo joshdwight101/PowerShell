@@ -126,7 +126,7 @@ if /I "%~1"=="CRITICAL" set /a SCORE+=3
 exit /b
 
 :log
-for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm:ss.fff\""') do set "TS=%%T"
+set "TS=%date% %time%"
 >> "%REPORT%" echo [!TS!] %~1
 if "%SILENT%"=="0" echo [!TS!] %~1
 exit /b

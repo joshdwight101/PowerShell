@@ -45,6 +45,15 @@
 - Simplified CMD metadata collection again to prevent early-stage failures on strict CMD environments.
 - Added explicit fallback when PowerShell is unavailable and per-field non-fatal metadata lookups.
 
+## v1.6.7
+- Fixed CMD logging to use native `%date% %time%` timestamps (no PowerShell dependency in logger).
+- Eliminated timestamp-related startup/runtime failures tied to repeated PowerShell calls in `:log`.
+
+## v1.7.0
+- Added `Get-ComputerInventory` function to PowerShell script for detailed startup inventory collection.
+- Added inventory summary at startup and inclusion in main log/final report flow.
+- Added optional JSON output (`-JsonReport`) with full structured `ComputerInventory` object and final results.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.
