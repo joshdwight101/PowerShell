@@ -32,6 +32,8 @@ exit /b 0
 net session >nul 2>&1 || (powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList '%*' -Verb RunAs" & exit /b 0)
 for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"`) do set "STAMP=%%T"
 set "REPORT=%~dp0Win11_IntegrityReport_%STAMP%.log"
+> "%REPORT%" echo. 2>nul
+if errorlevel 1 set "REPORT=%TEMP%\Win11_IntegrityReport_%STAMP%.log"
 
 call :log "Windows 11 Integrity Check + Repair + Recheck"
 call :log "Arguments: %*"
@@ -45,7 +47,7 @@ if /I "%first_FREESPACE%"=="FAIL" (
   call :log "Free space is below 10 GB. Heavy repairs may fail."
   if "%FORCE%"=="0" (
     if "%SILENT%"=="1" (call :log "Silent mode without -force: skipping heavy repair." & set "NEEDREPAIR=0") else (
-      choice /C YN /N /M "Low free space (<10GB). Continue heavy repairs? [Y/N]: "
+      call :prompt_low_space_continue
       if errorlevel 2 set "NEEDREPAIR=0"
     )
   )
@@ -67,7 +69,14 @@ if "%RESET_NETWORK%"=="1" call :reset_network
 
 call :score_results final
 call :final_verdict
-if "%POST_REBOOT%"=="1" call :handle_reboot_prompt
+if "%POST_REBOOT%"=="1" call :prompt_low_space_continue
+setlocal
+set "PROMPTMSG=Low free space less than 10GB. Continue heavy repairs? [Y/N]: "
+choice /C YN /N /M "%PROMPTMSG%"
+set "RC=%ERRORLEVEL%"
+endlocal & exit /b %RC%
+
+:handle_reboot_prompt
 
 call :log "Report saved to: %REPORT%"
 if "%SILENT%"=="0" (type "%REPORT%" & start "Integrity Report" notepad "%REPORT%")
