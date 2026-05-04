@@ -33,6 +33,10 @@
 - Added explicit run start/end timestamps and phase duration timestamps in PowerShell output.
 - Added repair outcome guidance text (including reinstall recommendation when unresolved issues remain).
 
+## v1.6.4
+- Fixed CMD startup reliability by replacing fragile WMIC/getmac parsing with PowerShell CIM/network queries.
+- Removed `goto`-style metadata parsing blocks that could fail early on some systems.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

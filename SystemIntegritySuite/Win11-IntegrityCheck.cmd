@@ -7,16 +7,18 @@ net session >nul 2>&1 || (powershell -NoProfile -ExecutionPolicy Bypass -WindowS
 set "REPORT=%~dp0Win11_IntegrityReport_%date:~10,4%%date:~4,2%%date:~7,2%_%time:~0,2%%time:~3,2%%time:~6,2%.log"
 set "REPORT=%REPORT: =0%"
 call :log "Windows 11 Integrity Check + Auto Repair"
-for /f "tokens=2 delims==" %%A in ('wmic bios get serialnumber /value ^| find "="') do set "SERIAL=%%A"
-for /f "tokens=2 delims==" %%A in ('wmic computersystem get manufacturer /value ^| find "="') do set "MFG=%%A"
-for /f "tokens=2 delims==" %%A in ('wmic computersystem get model /value ^| find "="') do set "MODEL=%%A"
-for /f "tokens=2 delims==" %%A in ('wmic os get version /value ^| find "="') do set "OSVER=%%A"
-for /f "tokens=2 delims=:" %%A in ('ipconfig ^| findstr /c:"IPv4 Address"') do (set "IP=%%A" & goto :ipdone)
-:ipdone
-set "IP=%IP: =%"
-for /f "tokens=1 delims= " %%A in ('getmac /fo csv /nh ^| findstr /v "N/A"') do (set "MAC=%%~A" & goto :macdone)
-:macdone
-set "MAC=%MAC:\"=%"
+set "SERIAL=Unknown"
+set "MFG=Unknown"
+set "MODEL=Unknown"
+set "OSVER=Unknown"
+set "IP=Unknown"
+set "MAC=Unknown"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_BIOS).SerialNumber"`) do set "SERIAL=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Manufacturer"`) do set "MFG=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_ComputerSystem).Model"`) do set "MODEL=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-CimInstance Win32_OperatingSystem).Version"`) do set "OSVER=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetIPAddress -AddressFamily IPv4 ^| ? {$_.IPAddress -notlike '169.254*' -and $_.IPAddress -ne '127.0.0.1'} ^| select -First 1 -ExpandProperty IPAddress)"`) do set "IP=%%A"
+for /f "usebackq delims=" %%A in (`powershell -NoProfile -Command "(Get-NetAdapter ^| ? Status -eq Up ^| select -First 1 -ExpandProperty MacAddress)"`) do set "MAC=%%A"
 call :log "Host: %COMPUTERNAME% | Serial: %SERIAL% | Manufacturer: %MFG% | Model: %MODEL%"
 call :log "IP: %IP% | MAC: %MAC% | Windows Version: %OSVER%"
 call :log "Run start time: %date% %time%"
