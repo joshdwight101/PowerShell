@@ -1,0 +1,4 @@
+{
+  "dotnet.defaultSolution": "SystemIntegritySuite/IntegrityCheckGui.csproj",
+  "csharp.experimental.debug.hotReload": false
+}
