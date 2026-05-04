@@ -75,3 +75,9 @@ Potential expansion roadmap for production hardening and feature growth:
 - Add secure erase mode and configurable post-encryption source cleanup
 - Add signed update pipeline and telemetry-free crash reporting
 - Add package format with manifest/signature for encrypted bundles and key escrow workflows
+
+EnterpriseAssetSuite/EnterpriseAssetSuite.psm1 - Enterprise endpoint telemetry and asset management module for Intune-friendly background execution. Captures serial number, manufacturer, model, hostname, Windows version/build, IP/MAC history snapshot, login/logoff events, pending reboot state, last reboot time, attached monitor identities, disk free-space health flags, and script integrity hash status. Writes JSON state locally and includes a SharePoint/Office 365 publishing integration point for Graph API-based list updates.
+
+EnterpriseAssetSuite/Invoke-EnterpriseAssetCollection.ps1 - Silent orchestrator entry point intended for logon-triggered scheduled task execution.
+
+EnterpriseAssetSuite/Install-EnterpriseAssetScheduledTask.ps1 - Helper script to register a hidden per-user scheduled task that runs collection at user logon.
