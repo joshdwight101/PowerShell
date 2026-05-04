@@ -19,6 +19,10 @@
 - Updated PowerShell and CMD scripts to perform detect -> repair -> recheck workflow automatically.
 - Added smarter DISM/SFC/update-component remediation sequence prior to final reinstall recommendation.
 
+## v1.6.1
+- Restored verbose step-by-step console progress in PowerShell and CMD scripts (check phase and repair phase).
+- Added clear `[step/total]` progress markers and stage descriptions for better operator visibility.
+
 ## v1.4.0
 - Reworked GUI into a diagnostic-command-center style layout.
 - Added step-by-step progress grid with status states (Running, PASS, FAIL, WARNING) and color coding.

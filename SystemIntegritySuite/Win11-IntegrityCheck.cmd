@@ -33,31 +33,38 @@ exit /b
 
 :run_checks
 set PFX=%~1
+call :step 1 7 "Checking OS build baseline..."
 for /f "tokens=3" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v CurrentBuild ^| find "CurrentBuild"') do set BUILD=%%A
 if !BUILD! GEQ 22000 (set %PFX%_OSBuild=PASS) else (set %PFX%_OSBuild=CRITICAL)
 call :log "OS Build => !%PFX%_OSBuild!"
 
+call :step 2 7 "Running SFC /verifyonly (can take several minutes)..."
 sfc /verifyonly > "%TEMP%\sfc_v.log"
 find /i "did not find any integrity violations" "%TEMP%\sfc_v.log" >nul && set %PFX%_SFC=PASS
 if not defined %PFX%_SFC (find /i "found integrity violations" "%TEMP%\sfc_v.log" >nul && set %PFX%_SFC=FAIL)
 if not defined %PFX%_SFC set %PFX%_SFC=WARNING
 call :log "SFC Verify => !%PFX%_SFC!"
 
+call :step 3 7 "Running DISM /CheckHealth..."
 DISM /Online /Cleanup-Image /CheckHealth > "%TEMP%\dism_c.log"
 find /i "No component store corruption detected" "%TEMP%\dism_c.log" >nul && set %PFX%_DISM=PASS
 if not defined %PFX%_DISM (find /i "component store is repairable" "%TEMP%\dism_c.log" >nul && set %PFX%_DISM=FAIL)
 if not defined %PFX%_DISM set %PFX%_DISM=WARNING
 call :log "DISM CheckHealth => !%PFX%_DISM!"
 
+call :step 4 7 "Checking Boot Configuration Data (BCD)..."
 bcdedit /enum {current} >nul 2>&1 && set %PFX%_Boot=PASS || set %PFX%_Boot=CRITICAL
 call :log "Boot Config => !%PFX%_Boot!"
 
+call :step 5 7 "Running CHKDSK online scan..."
 chkdsk %SystemDrive% /scan > "%TEMP%\chk.log"
 find /i "found no problems" "%TEMP%\chk.log" >nul && set %PFX%_CHKDSK=PASS || set %PFX%_CHKDSK=WARNING
 call :log "CHKDSK => !%PFX%_CHKDSK!"
 
+call :step 6 7 "Checking CBS servicing log presence..."
 if exist "%windir%\Logs\CBS\CBS.log" (set %PFX%_CBS=PASS) else (set %PFX%_CBS=WARNING)
 call :log "CBS Log => !%PFX%_CBS!"
+call :step 7 7 "Checking free space threshold (>=20GB)..."
 for /f "tokens=3" %%A in ('dir %SystemDrive% ^| find "bytes free"') do set FREE=%%A
 set FREE=!FREE:,=!
 if !FREE! GEQ 21474836480 (set %PFX%_FreeSpace=PASS) else (set %PFX%_FreeSpace=FAIL)
@@ -66,10 +73,12 @@ exit /b
 
 :repair
 call :log "--- Repair phase started ---"
-if not "%first_DISM%"=="PASS" DISM /Online /Cleanup-Image /RestoreHealth >nul
-if not "%first_SFC%"=="PASS" sfc /scannow >nul
-if not "%first_CHKDSK%"=="PASS" chkdsk %SystemDrive% /scan >nul
+if not "%first_DISM%"=="PASS" (call :step 1 4 "Repair: DISM /RestoreHealth" & DISM /Online /Cleanup-Image /RestoreHealth >nul)
+if not "%first_SFC%"=="PASS" (call :step 2 4 "Repair: SFC /scannow" & sfc /scannow >nul)
+if not "%first_CHKDSK%"=="PASS" (call :step 3 4 "Repair: CHKDSK online retry" & chkdsk %SystemDrive% /scan >nul)
+call :step 4 4 "Repair: Reset Windows Update components"
 cmd /c "net stop wuauserv & net stop bits & net stop cryptsvc & ren %systemroot%\SoftwareDistribution SoftwareDistribution.bak & ren %systemroot%\System32\catroot2 catroot2.bak & net start cryptsvc & net start bits & net start wuauserv" >nul
+call :log "--- Repair phase completed ---"
 exit /b
 
 :copy_first_to_final
@@ -94,4 +103,8 @@ exit /b
 for /f %%T in ('powershell -NoProfile -Command "Get-Date -Format \"yyyy-MM-dd HH:mm:ss.fff\""') do set "TS=%%T"
 >> "%REPORT%" echo [!TS!] %~1
 if "%SILENT%"=="0" echo [!TS!] %~1
+exit /b
+
+:step
+call :log "[%~1/%~2] %~3"
 exit /b
