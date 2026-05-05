@@ -71,7 +71,7 @@ call :score_results final
 call :final_verdict
 if "%POST_REBOOT%"=="1" call :prompt_low_space_continue
 setlocal
-set "PROMPTMSG=Low free space less than 10GB. Continue heavy repairs? [Y/N]: "
+set "PROMPTMSG=Low free space under 10GB. Continue heavy repairs? [Y/N]: "
 choice /C YN /N /M "%PROMPTMSG%"
 set "RC=%ERRORLEVEL%"
 endlocal & exit /b %RC%
