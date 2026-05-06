@@ -87,7 +87,6 @@ public class CodexPulseLauncherForm : Form
             Location = new Point(27, 58)
         };
 
-        _searchBox.PlaceholderText = "Search scripts...";
         _searchBox.BackColor = Color.FromArgb(30, 41, 59);
         _searchBox.ForeColor = Color.White;
         _searchBox.BorderStyle = BorderStyle.FixedSingle;
@@ -195,7 +194,7 @@ public class CodexPulseLauncherForm : Form
             count++;
         }
 
-        _statusLabel.Text = $"Ready · Found {count} script(s)";
+        _statusLabel.Text = string.Format("Ready - Found {0} script(s)", count);
         if (_scriptsView.Items.Count > 0)
         {
             _scriptsView.Items[0].Selected = true;
@@ -206,7 +205,7 @@ public class CodexPulseLauncherForm : Form
         }
     }
 
-    private string? GetSelectedScript()
+    private string GetSelectedScript()
     {
         if (_scriptsView.SelectedItems.Count == 0)
         {
@@ -219,7 +218,7 @@ public class CodexPulseLauncherForm : Form
     private void UpdateSelectedPathLabel()
     {
         var script = GetSelectedScript();
-        _pathLabel.Text = script == null ? "Selected: (none)" : $"Selected: {script}";
+        _pathLabel.Text = script == null ? "Selected: (none)" : "Selected: " + script;
     }
 
     private void OpenSelectedFolder()
@@ -265,12 +264,12 @@ public class CodexPulseLauncherForm : Form
             Process.Start(new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File \"{escapedPath}\"",
+                Arguments = "-NoProfile -ExecutionPolicy Bypass -File \"" + escapedPath + "\"",
                 WorkingDirectory = Path.GetDirectoryName(script) ?? _rootPath,
                 UseShellExecute = true
             });
 
-            _statusLabel.Text = $"Launched: {Path.GetFileName(script)}";
+            _statusLabel.Text = "Launched: " + Path.GetFileName(script);
             _statusLabel.ForeColor = Color.FromArgb(52, 211, 153);
         }
         catch (Exception ex)
