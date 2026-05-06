@@ -94,7 +94,7 @@ public class CodexPulseLauncherForm : Form
         _searchBox.ForeColor = Color.White;
         _searchBox.BorderStyle = BorderStyle.FixedSingle;
         _searchBox.Location = new Point(24, 126);
-        _searchBox.Size = new Size(420, 30);
+        _searchBox.Size = new Size(390, 30);
 
         _refreshButton.Text = "Refresh";
         _refreshButton.FlatStyle = FlatStyle.Flat;
