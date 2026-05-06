@@ -94,7 +94,7 @@ public class CodexPulseLauncherForm : Form
         _searchBox.ForeColor = Color.White;
         _searchBox.BorderStyle = BorderStyle.FixedSingle;
         _searchBox.Location = new Point(24, 126);
-        _searchBox.Size = new Size(500, 30);
+        _searchBox.Size = new Size(460, 30);
 
         _refreshButton.Text = "Refresh";
         _refreshButton.FlatStyle = FlatStyle.Flat;
@@ -136,12 +136,12 @@ public class CodexPulseLauncherForm : Form
         _pathLabel.Text = "Selected: (none)";
         _pathLabel.AutoEllipsis = true;
         _pathLabel.ForeColor = Color.FromArgb(148, 163, 184);
-        _pathLabel.Location = new Point(24, 676);
+        _pathLabel.Location = new Point(24, 652);
         _pathLabel.Size = new Size(1060, 24);
 
         _statusLabel.Text = _isAdmin ? "Ready (Admin)" : "Ready (Standard User)";
         _statusLabel.ForeColor = Color.FromArgb(52, 211, 153);
-        _statusLabel.Location = new Point(24, 700);
+        _statusLabel.Location = new Point(24, 676);
         _statusLabel.Size = new Size(560, 24);
 
         var folderLabel = new Label
