@@ -136,27 +136,27 @@ public class CodexPulseLauncherForm : Form
         _pathLabel.Text = "Selected: (none)";
         _pathLabel.AutoEllipsis = true;
         _pathLabel.ForeColor = Color.FromArgb(148, 163, 184);
-        _pathLabel.Location = new Point(24, 648);
+        _pathLabel.Location = new Point(24, 676);
         _pathLabel.Size = new Size(1060, 24);
 
         _statusLabel.Text = _isAdmin ? "Ready (Admin)" : "Ready (Standard User)";
         _statusLabel.ForeColor = Color.FromArgb(52, 211, 153);
-        _statusLabel.Location = new Point(24, 673);
+        _statusLabel.Location = new Point(24, 700);
         _statusLabel.Size = new Size(560, 24);
 
         var folderLabel = new Label
         {
-            Text = "Script Directory",
+            Text = "Script Directory:",
             ForeColor = Color.FromArgb(148, 163, 184),
             BackColor = Color.FromArgb(17, 24, 39),
             AutoSize = true,
-            Location = new Point(540, 62)
+            Location = new Point(540, 650)
         };
 
         _refreshSeconds.Minimum = 2;
         _refreshSeconds.Maximum = 600;
         _refreshSeconds.Value = 15;
-        _refreshSeconds.Location = new Point(905, 669);
+        _refreshSeconds.Location = new Point(1018, 129);
         _refreshSeconds.Size = new Size(58, 24);
         _refreshSeconds.BackColor = Color.FromArgb(30, 41, 59);
         _refreshSeconds.ForeColor = Color.White;
@@ -164,14 +164,13 @@ public class CodexPulseLauncherForm : Form
         _autoRefreshCheck.Text = "Auto Refresh";
         _autoRefreshCheck.ForeColor = Color.FromArgb(148, 163, 184);
         _autoRefreshCheck.BackColor = Color.FromArgb(17, 24, 39);
-        _autoRefreshCheck.Location = new Point(792, 671);
+        _autoRefreshCheck.Location = new Point(910, 131);
         _autoRefreshCheck.Size = new Size(108, 24);
 
-        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(968, 672) };
-        var rootLabel = new Label { Text = "Folder:", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(540, 92) };
+        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(1080, 132) };
 
-        _rootPathBox.Location = new Point(590, 89);
-        _rootPathBox.Size = new Size(415, 24);
+        _rootPathBox.Location = new Point(642, 647);
+        _rootPathBox.Size = new Size(363, 24);
         _rootPathBox.ReadOnly = true;
         _rootPathBox.BackColor = Color.FromArgb(30, 41, 59);
         _rootPathBox.ForeColor = Color.White;
@@ -182,12 +181,12 @@ public class CodexPulseLauncherForm : Form
         _browseRootButton.FlatAppearance.BorderColor = Color.FromArgb(71, 85, 105);
         _browseRootButton.BackColor = Color.FromArgb(30, 41, 59);
         _browseRootButton.ForeColor = Color.White;
-        _browseRootButton.Location = new Point(1010, 88);
+        _browseRootButton.Location = new Point(1010, 646);
         _browseRootButton.Size = new Size(68, 26);
 
         Controls.Add(title); Controls.Add(subtitle); Controls.Add(_searchBox); Controls.Add(_refreshButton);
         Controls.Add(_launchButton); Controls.Add(_openButton); Controls.Add(_scriptsView); Controls.Add(_pathLabel);
-        Controls.Add(_statusLabel); Controls.Add(folderLabel); Controls.Add(rootLabel); Controls.Add(_rootPathBox); Controls.Add(_browseRootButton);
+        Controls.Add(_statusLabel); Controls.Add(folderLabel); Controls.Add(_rootPathBox); Controls.Add(_browseRootButton);
         Controls.Add(_autoRefreshCheck); Controls.Add(_refreshSeconds); Controls.Add(secondsLabel);
     }
 
