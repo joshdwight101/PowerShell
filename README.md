@@ -1,83 +1,261 @@
-# PowerShell
+# PowerShell Toolkit Repository
 
-PowerShell scripts working/worked on.
+A curated collection of PowerShell utilities and small suites for endpoint administration, automation, diagnostics, security operations, and rapid script development/testing.
 
-File - Description
+This repository includes:
+- Standalone admin scripts (`*.ps1`)
+- Reusable modules (`*.psm1`)
+- GUI tooling (PowerShell + embedded C#, and .NET WinForms project assets)
+- Multi-script suites for enterprise collection and Windows integrity auditing
 
-Add-Signature.ps1 - This file when ran will prompt for a file and when the path is entered into the console it will utilize the signature that you have stored at Cert:\\CurrentUser\\My and sign the file at the path you specified. Note: Don't use quotes around the path that you enter when using the script, I will mitigate this bug in the future so that both ways are accepted but for now don't use any quotes in the path.
+---
 
+## Author
 
+**Joshua Dwight**  
+GitHub: https://github.com/joshdwight101
 
-AutoPilot-CSV-Gen.ps1 - This file aims to grab the hardware hash from a computer and then create the csv file that is utilized for adding a computer into Microsoft Intune AutoPilot. In essence you run this script, get the CSV, log into Intune and Import the CSV and the device is imported into AutoPilot.
+---
 
+## Quick Start
 
+### 1) Clone the repository
+```powershell
+git clone https://github.com/joshdwight101/PowerShell.git
+cd PowerShell
+```
 
-DirectorySign.ps1 - DirectorySign opens up a simple gui where you can enter a path, and click a button and the script/app will sign all the powershell scripts in that directory and/or any subdirectories but utilizing the signature that is stored at Cert:\\CurrentUser\\My, so be careful when using this tool that you understand that it will sign scripts in subdirectories underneath the path you specify. Utilize the other script Add-Signature.ps1 if you want to sign a single script at a time (recommended for one-off tasks).
+### 2) Run scripts safely in a dev/test workflow
+For iterative testing while developing with Codex:
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\CodexPulseLauncher.ps1
+```
+Or run a script directly:
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\SomeScript.ps1
+```
 
+### 3) Module import pattern
+If using module-based tooling (e.g., `JDPM.psm1`):
+```powershell
+Import-Module .\JDPM.psm1 -Force
+```
 
+---
 
-Get-Monitor-Information.ps1 - This script is a simple script that attempts to obtain information about the display monitors that are hooked up to a workstation. By default it outputs to C:\\Temp, but the variables are at the top of the script for easy editing.
+## Repository Structure
 
+### Root Scripts & Modules
 
+| File | Type | Purpose | Typical Usage |
+|---|---|---|---|
+| `Add-Signature.ps1` | Script | Signs a single script using a certificate from `Cert:\CurrentUser\My`. | One-off script signing operations. |
+| `AutoPilot-CSV-Gen.ps1` | Script | Generates hardware-hash CSV workflow for Intune/Autopilot enrollment. | Device provisioning preparation. |
+| `CodexPulseLauncher.ps1` | Script + C# GUI | Modern launcher to discover and run repository scripts with `ExecutionPolicy Bypass`. | Fast script testing and iteration with Codex. |
+| `DirectorySign.ps1` | Script + GUI | Signs all PowerShell scripts in a target directory tree. | Bulk signing across script folders. |
+| `Get-Monitor-Information.ps1` | Script | Collects monitor/display information. | Hardware inventory/troubleshooting. |
+| `Get-WinUpdates.ps1` | Script | Windows update discovery/reporting automation. | Update-state checks. |
+| `JDPM.psm1` | Module | Printer deployment/management helpers (install/remove/purge style operations). | Printer automation in deployment scripts. |
+| `LetsEncrypt-CertPowerTool.ps1` | Script | Certificate/Let’s Encrypt oriented PowerShell automation tooling. | Certificate operations and helper workflows. |
+| `PowershellShortcutMaker.ps1` | Script + GUI | Creates `.lnk` shortcuts to launch scripts with standardized parameters. | Enterprise shortcut packaging/deployment. |
+| `RandomStringGenerator.ps1` | Script + GUI | Generates random strings and copies output to clipboard. | Password/token seed generation convenience. |
+| `ShutDown-PC.ps1` | Script | Enforces shutdown behavior during configured windows (often startup task-driven). | Kiosk/lab/energy policy enforcement. |
+| `SuperAdminTool.ps1` | Script | Administrative utility script for elevated workstation/server operations. | Admin action bundling and convenience tasks. |
+| `README.md` | Documentation | Repository overview, usage, and operational guidance. | Start here. |
+| `LICENSE` | Legal | Project license. | Governance/compliance. |
 
-JDPM.psm1 - JDPM is a PowerShell module that aim's to simplify printer management in your scripting. You simply drop this script next to your installation script, import the module into your script utilizing: Import-Module JDPM.psm1. After that you can simply automate installing printers with Install-Printer and a few arguments: PrinterName, PrinterIP, DriverName, InfPath, Duplex. There is a function to uninstall printers with the Uninstall-Printer function. There's an ability to purge all printers utilizing a function called purge\_printers, this is in case you're looking to clear the printers and re-add new ones. The module automates adding the ports and drivers and even does it's own checking to see if they exist prior to creating them if they do not exist. Spend less time writing the script, and more time getting the job done.
+### `EnterpriseAssetSuite/`
 
+| File | Type | Purpose |
+|---|---|---|
+| `EnterpriseAssetSuite.psm1` | Module | Collects endpoint telemetry/asset inventory data for enterprise management workflows. |
+| `Invoke-EnterpriseAssetCollection.ps1` | Script | Silent orchestrator entry point for asset collection execution. |
+| `Install-EnterpriseAssetScheduledTask.ps1` | Script | Registers a hidden per-user scheduled task to run collection at logon. |
 
+### `SystemIntegritySuite/`
 
-PowershellShortcutMaker.ps1 - a WinForms-based utility designed to generate Windows shortcuts that launch PowerShell scripts with standardized execution parameters.
+| File | Type | Purpose |
+|---|---|---|
+| `Win11-IntegrityCheck.ps1` | Script | PowerShell-side integrity checks for Windows 11 endpoints. |
+| `Win11-IntegrityCheck.cmd` | Cmd wrapper | Convenience launcher/wrapper for integrity checks. |
+| `IntegrityCheckGui.cs` | C# source | WinForms GUI implementation for integrity workflow. |
+| `IntegrityCheckGui.csproj` | .NET project file | Build definition for GUI app. |
+| `SystemIntegritySuite.sln` | Solution | Visual Studio solution for suite components. |
+| `app.manifest` | Manifest | Application manifest metadata. |
+| `BUILD-INSTRUCTIONS.md` | Documentation | Build/setup details for the suite. |
+| `CHANGELOG.md` | Documentation | Release/change history for integrity suite updates. |
+| `README.md` | Documentation | Suite-specific overview and usage guidance. |
 
-The tool provides a simple GUI that allows administrators to:
+---
 
--Browse and select a .ps1 script
+## Detailed Usage Instructions
 
--Define a custom shortcut name
+## 1) Codex-driven script testing (recommended)
+Use **CodexPulseLauncher** for rapid iteration during development:
 
--Automatically generate a .lnk file in the script’s directory
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\CodexPulseLauncher.ps1
+```
 
--Launch the script using PowerShell with -WindowStyle Hidden and -NoProfile
+### What it does
+- Recursively discovers `*.ps1` files in the repo.
+- Provides searchable list with file metadata.
+- Launches selected script via `-ExecutionPolicy Bypass`.
+- Supports double-click launch and open-folder convenience.
+- Includes an aligned top-right script-directory row (label, path, browse) and bottom-right Auto Refresh controls.
 
-Primary use case is enterprise deployment. Administrators can store signed PowerShell scripts in secured, read-only directories and use this utility to create shortcuts that can be distributed via Intune, Group Policy, or other endpoint management solutions.
+### Best practices
+- Keep scripts idempotent where possible for repeated test runs.
+- Use dedicated test inputs/tenants/dev devices.
+- If a script modifies system settings, validate on a lab machine first.
 
-This approach supports centralized script management, consistent execution behavior, and user-context shortcut deployment.
+---
 
+## 2) Script signing workflows
 
+### Sign one script
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Add-Signature.ps1
+```
 
-RandomStringGenerator.ps1 - RandomStringGenerator is a simple powershell gui with a slider that allows you to generate a random string of a specified length. Each time you press the button it copies a new randomly generated string into the clipboard to be pasted wherever.
+### Sign an entire directory tree
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\DirectorySign.ps1
+```
 
+**Notes**
+- Requires a valid code-signing cert in `Cert:\CurrentUser\My`.
+- Prefer single-file signing for high-risk scripts before bulk actions.
 
+---
 
-Shutdown-PC.ps1 - built to be utilized as a script launched by Scheduled Task as a startup script. The purpose is in the event that you absolutely do not want a computer to stay on during a specified set of hours. This script enforces that rule by checking at startup and if the time is in between the specified window configured in the script then the computer will initiate shut down immediately. This means no matter how many times a user turns the computer on during that window the computer will just repeatedly shut down as soon as it starts up.
+## 3) Printer deployment automation (JDPM module)
 
+```powershell
+Import-Module .\JDPM.psm1 -Force
+# Example pattern (adjust parameters to your environment)
+# Install-Printer -PrinterName "HQ-Printer-01" -PrinterIP "10.0.0.25" -DriverName "Driver Name" -InfPath "C:\Drivers\printer.inf" -Duplex $true
+```
 
+Recommended approach:
+1. Validate driver package and INF path in a test machine.
+2. Confirm spooler service health.
+3. Roll out with logging/transcript enabled.
 
-SecureVault-Encryptor.ps1 - A full GUI-oriented encryption application built in PowerShell with embedded C# cryptography routines for high throughput operations. The app provides:
+---
 
-- Standalone design (no dependencies on other scripts in this repository)
-- AES-256-CBC encryption + HMAC-SHA256 authentication (compatible with Windows PowerShell 5.1+)
-- Optional certificate-backed key protection using RSA-OAEP (compatibility mode for older PowerShell/.NET hosts)
-- Optional password-based encryption mode using PBKDF2 (high iteration count)
-- Output files are written in-place in the same directory as source files (`.psenc` for encrypt, restored/`.decrypted` for decrypt)
-- Reliable background job processing with worker recommendations based on available cores
-- Auto-manage thread recommendation based on live CPU utilization to reduce overcommitting busy systems
-- Built-in self-signed encryption certificate generation (4096-bit RSA)
-- Modern dark-themed WinForms interface for intuitive operation
-- Full control labeling, per-control tooltips, and an in-app Help menu with guided index/training text
-- Debug mode with verbose per-file event logs (and launch transcript file) in the script directory for troubleshooting
-- "Copy Debug Report" button to capture environment/settings/log tail for rapid issue handoff
-- Launch switch `-DebugMode` to automatically enable debug logging/transcript output at startup
-- Cancel button for graceful interruption of active jobs and immediate re-enable of Start control
+## 4) Endpoint inventory collection (`EnterpriseAssetSuite`)
 
-Potential expansion roadmap for production hardening and feature growth:
+### Install scheduled collection task
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\EnterpriseAssetSuite\Install-EnterpriseAssetScheduledTask.ps1
+```
 
-- Add Argon2id (memory-hard KDF) support for password mode
-- Add optional hardware-backed key storage via TPM/HSM/Windows CNG providers
-- Add pause/resume queues, retry policy, and job persistence for very large batches
-- Add secure erase mode and configurable post-encryption source cleanup
-- Add signed update pipeline and telemetry-free crash reporting
-- Add package format with manifest/signature for encrypted bundles and key escrow workflows
+### Run collection immediately (manual test)
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\EnterpriseAssetSuite\Invoke-EnterpriseAssetCollection.ps1
+```
 
-EnterpriseAssetSuite/EnterpriseAssetSuite.psm1 - Enterprise endpoint telemetry and asset management module for Intune-friendly background execution. Captures serial number, manufacturer, model, hostname, Windows version/build, IP/MAC history snapshot, login/logoff events, pending reboot state, last reboot time, attached monitor identities, disk free-space health flags, and script integrity hash status. Writes JSON state locally and includes a SharePoint/Office 365 publishing integration point for Graph API-based list updates.
+### Integrate module directly
+```powershell
+Import-Module .\EnterpriseAssetSuite\EnterpriseAssetSuite.psm1 -Force
+```
 
-EnterpriseAssetSuite/Invoke-EnterpriseAssetCollection.ps1 - Silent orchestrator entry point intended for logon-triggered scheduled task execution.
+Use this suite when you need recurring user-context telemetry snapshots suitable for enterprise reporting pipelines.
 
-EnterpriseAssetSuite/Install-EnterpriseAssetScheduledTask.ps1 - Helper script to register a hidden per-user scheduled task that runs collection at user logon.
+---
+
+## 5) System integrity workflows (`SystemIntegritySuite`)
+
+### PowerShell check
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\SystemIntegritySuite\Win11-IntegrityCheck.ps1
+```
+
+### CMD wrapper
+```cmd
+SystemIntegritySuite\Win11-IntegrityCheck.cmd
+```
+
+### Build GUI from source
+Open `SystemIntegritySuite\SystemIntegritySuite.sln` in Visual Studio and build using the instructions in:
+- `SystemIntegritySuite\BUILD-INSTRUCTIONS.md`
+- `SystemIntegritySuite\README.md`
+
+---
+
+## 6) Additional utilities
+
+### Monitor inventory
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Get-Monitor-Information.ps1
+```
+
+### Windows update checks
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Get-WinUpdates.ps1
+```
+
+### PowerShell shortcut generation
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\PowershellShortcutMaker.ps1
+```
+
+### Random string generator
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\RandomStringGenerator.ps1
+```
+
+### Startup shutdown enforcement
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ShutDown-PC.ps1
+```
+
+### Certificate workflow utility
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LetsEncrypt-CertPowerTool.ps1
+```
+
+### Super admin helper
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\SuperAdminTool.ps1
+```
+
+---
+
+## Operational Guidance
+
+## Execution Policy & Security
+- `Bypass` is useful for rapid internal testing but should be handled carefully.
+- For production rollouts, prefer signed scripts and least-privilege execution contexts.
+- Store sensitive material (keys, credentials, cert private keys) in secure stores and avoid hardcoding.
+
+## Logging & Troubleshooting
+- Run scripts with `-NoProfile` to reduce profile-side effects during debugging.
+- Use transcript logging in change-sensitive workflows:
+  ```powershell
+  Start-Transcript -Path .\script-run.log
+  # run your script
+  Stop-Transcript
+  ```
+- Validate on non-production hosts first.
+
+## Compatibility Notes
+- Most scripts target Windows environments (GUI, cert store, scheduled task, printer stack, explorer shell).
+- GUI scripts require an interactive desktop session.
+
+---
+
+## Contribution Guidelines
+
+1. Keep new scripts focused and well-commented.
+2. Add clear parameter help (`.SYNOPSIS`, `.DESCRIPTION`, `.PARAMETER`, examples).
+3. Prefer idempotent operations where practical.
+4. Update this README when adding/removing files.
+5. Include test notes in PRs (manual and/or automated).
+
+---
+
+## License
+
+See `LICENSE` for licensing details.
