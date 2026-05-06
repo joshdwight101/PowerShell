@@ -73,6 +73,11 @@ public class CodexPulseLauncherForm : Form
         RefreshScripts();
     }
 
+    public string GetRootPath()
+    {
+        return _rootPath;
+    }
+
     private bool IsRunningAsAdmin()
     {
         WindowsIdentity identity = WindowsIdentity.GetCurrent();
