@@ -94,7 +94,7 @@ public class CodexPulseLauncherForm : Form
         _searchBox.ForeColor = Color.White;
         _searchBox.BorderStyle = BorderStyle.FixedSingle;
         _searchBox.Location = new Point(24, 126);
-        _searchBox.Size = new Size(460, 30);
+        _searchBox.Size = new Size(420, 30);
 
         _refreshButton.Text = "Refresh";
         _refreshButton.FlatStyle = FlatStyle.Flat;
@@ -156,7 +156,7 @@ public class CodexPulseLauncherForm : Form
         _refreshSeconds.Minimum = 2;
         _refreshSeconds.Maximum = 600;
         _refreshSeconds.Value = 15;
-        _refreshSeconds.Location = new Point(1008, 129);
+        _refreshSeconds.Location = new Point(995, 129);
         _refreshSeconds.Size = new Size(58, 24);
         _refreshSeconds.BackColor = Color.FromArgb(30, 41, 59);
         _refreshSeconds.ForeColor = Color.White;
@@ -164,10 +164,10 @@ public class CodexPulseLauncherForm : Form
         _autoRefreshCheck.Text = "Auto Refresh";
         _autoRefreshCheck.ForeColor = Color.FromArgb(148, 163, 184);
         _autoRefreshCheck.BackColor = Color.FromArgb(17, 24, 39);
-        _autoRefreshCheck.Location = new Point(900, 131);
+        _autoRefreshCheck.Location = new Point(882, 131);
         _autoRefreshCheck.Size = new Size(108, 24);
 
-        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(1070, 132) };
+        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(1057, 132) };
 
         _rootPathBox.Location = new Point(642, 658);
         _rootPathBox.Size = new Size(330, 24);
@@ -188,6 +188,10 @@ public class CodexPulseLauncherForm : Form
         Controls.Add(_launchButton); Controls.Add(_openButton); Controls.Add(_scriptsView); Controls.Add(_pathLabel);
         Controls.Add(_statusLabel); Controls.Add(folderLabel); Controls.Add(_rootPathBox); Controls.Add(_browseRootButton);
         Controls.Add(_autoRefreshCheck); Controls.Add(_refreshSeconds); Controls.Add(secondsLabel);
+
+        folderLabel.BringToFront();
+        _rootPathBox.BringToFront();
+        _browseRootButton.BringToFront();
     }
 
     private void ConfigureContextMenu()
