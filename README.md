@@ -102,7 +102,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\CodexPulseLauncher.ps1
 - Provides searchable list with file metadata.
 - Launches selected script via `-ExecutionPolicy Bypass`.
 - Supports double-click launch and open-folder convenience.
-- Includes a clean upper-right **Workspace** control panel that groups Auto Refresh settings and script-directory browsing.
+- Includes a dedicated top-right script-directory picker (with expanded path visibility) and bottom-right Auto Refresh controls.
 
 ### Best practices
 - Keep scripts idempotent where possible for repeated test runs.

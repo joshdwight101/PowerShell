@@ -146,32 +146,32 @@ public class CodexPulseLauncherForm : Form
 
         var workspaceGroup = new GroupBox
         {
-            Text = "Workspace",
+            Text = "Script Directory",
             ForeColor = Color.FromArgb(148, 163, 184),
             BackColor = Color.FromArgb(17, 24, 39),
             Location = new Point(680, 14),
             Size = new Size(404, 74)
         };
 
-        _autoRefreshCheck.Text = "Auto Refresh";
-        _autoRefreshCheck.ForeColor = Color.FromArgb(148, 163, 184);
-        _autoRefreshCheck.BackColor = Color.FromArgb(17, 24, 39);
-        _autoRefreshCheck.Location = new Point(10, 30);
-        _autoRefreshCheck.Size = new Size(102, 24);
-
         _refreshSeconds.Minimum = 2;
         _refreshSeconds.Maximum = 600;
         _refreshSeconds.Value = 15;
-        _refreshSeconds.Location = new Point(118, 28);
+        _refreshSeconds.Location = new Point(905, 670);
         _refreshSeconds.Size = new Size(58, 24);
         _refreshSeconds.BackColor = Color.FromArgb(30, 41, 59);
         _refreshSeconds.ForeColor = Color.White;
 
-        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(182, 32) };
-        var rootLabel = new Label { Text = "Scripts:", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(218, 32) };
+        _autoRefreshCheck.Text = "Auto Refresh";
+        _autoRefreshCheck.ForeColor = Color.FromArgb(148, 163, 184);
+        _autoRefreshCheck.BackColor = Color.FromArgb(17, 24, 39);
+        _autoRefreshCheck.Location = new Point(792, 672);
+        _autoRefreshCheck.Size = new Size(108, 24);
 
-        _rootPathBox.Location = new Point(10, 50);
-        _rootPathBox.Size = new Size(318, 24);
+        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(968, 673) };
+        var rootLabel = new Label { Text = "Folder:", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(10, 29) };
+
+        _rootPathBox.Location = new Point(62, 26);
+        _rootPathBox.Size = new Size(262, 24);
         _rootPathBox.ReadOnly = true;
         _rootPathBox.BackColor = Color.FromArgb(30, 41, 59);
         _rootPathBox.ForeColor = Color.White;
@@ -182,19 +182,16 @@ public class CodexPulseLauncherForm : Form
         _browseRootButton.FlatAppearance.BorderColor = Color.FromArgb(71, 85, 105);
         _browseRootButton.BackColor = Color.FromArgb(30, 41, 59);
         _browseRootButton.ForeColor = Color.White;
-        _browseRootButton.Location = new Point(332, 49);
+        _browseRootButton.Location = new Point(329, 25);
         _browseRootButton.Size = new Size(68, 26);
 
-        workspaceGroup.Controls.Add(_autoRefreshCheck);
-        workspaceGroup.Controls.Add(_refreshSeconds);
-        workspaceGroup.Controls.Add(secondsLabel);
         workspaceGroup.Controls.Add(rootLabel);
         workspaceGroup.Controls.Add(_rootPathBox);
         workspaceGroup.Controls.Add(_browseRootButton);
 
         Controls.Add(title); Controls.Add(subtitle); Controls.Add(_searchBox); Controls.Add(_refreshButton);
         Controls.Add(_launchButton); Controls.Add(_openButton); Controls.Add(_scriptsView); Controls.Add(_pathLabel);
-        Controls.Add(_statusLabel); Controls.Add(workspaceGroup);
+        Controls.Add(_statusLabel); Controls.Add(workspaceGroup); Controls.Add(_autoRefreshCheck); Controls.Add(_refreshSeconds); Controls.Add(secondsLabel);
     }
 
     private void ConfigureContextMenu()
