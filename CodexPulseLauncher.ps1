@@ -94,14 +94,14 @@ public class CodexPulseLauncherForm : Form
         _searchBox.ForeColor = Color.White;
         _searchBox.BorderStyle = BorderStyle.FixedSingle;
         _searchBox.Location = new Point(24, 126);
-        _searchBox.Size = new Size(390, 30);
+        _searchBox.Size = new Size(460, 30);
 
         _refreshButton.Text = "Refresh";
         _refreshButton.FlatStyle = FlatStyle.Flat;
         _refreshButton.FlatAppearance.BorderColor = Color.FromArgb(71, 85, 105);
         _refreshButton.BackColor = Color.FromArgb(30, 41, 59);
         _refreshButton.ForeColor = Color.White;
-        _refreshButton.Location = new Point(540, 126);
+        _refreshButton.Location = new Point(500, 126);
         _refreshButton.Size = new Size(100, 30);
 
         _launchButton.Text = "Launch (Bypass)";
@@ -109,7 +109,7 @@ public class CodexPulseLauncherForm : Form
         _launchButton.FlatAppearance.BorderColor = Color.FromArgb(16, 185, 129);
         _launchButton.BackColor = Color.FromArgb(5, 150, 105);
         _launchButton.ForeColor = Color.White;
-        _launchButton.Location = new Point(652, 126);
+        _launchButton.Location = new Point(612, 126);
         _launchButton.Size = new Size(150, 30);
 
         _openButton.Text = "Open Folder";
@@ -117,7 +117,7 @@ public class CodexPulseLauncherForm : Form
         _openButton.FlatAppearance.BorderColor = Color.FromArgb(71, 85, 105);
         _openButton.BackColor = Color.FromArgb(30, 41, 59);
         _openButton.ForeColor = Color.White;
-        _openButton.Location = new Point(812, 126);
+        _openButton.Location = new Point(772, 126);
         _openButton.Size = new Size(120, 30);
 
         _scriptsView.Location = new Point(24, 171);
@@ -156,7 +156,7 @@ public class CodexPulseLauncherForm : Form
         _refreshSeconds.Minimum = 2;
         _refreshSeconds.Maximum = 600;
         _refreshSeconds.Value = 15;
-        _refreshSeconds.Location = new Point(995, 129);
+        _refreshSeconds.Location = new Point(980, 129);
         _refreshSeconds.Size = new Size(58, 24);
         _refreshSeconds.BackColor = Color.FromArgb(30, 41, 59);
         _refreshSeconds.ForeColor = Color.White;
@@ -164,10 +164,10 @@ public class CodexPulseLauncherForm : Form
         _autoRefreshCheck.Text = "Auto Refresh";
         _autoRefreshCheck.ForeColor = Color.FromArgb(148, 163, 184);
         _autoRefreshCheck.BackColor = Color.FromArgb(17, 24, 39);
-        _autoRefreshCheck.Location = new Point(882, 131);
+        _autoRefreshCheck.Location = new Point(867, 131);
         _autoRefreshCheck.Size = new Size(108, 24);
 
-        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(1057, 132) };
+        var secondsLabel = new Label { Text = "sec", ForeColor = Color.FromArgb(148, 163, 184), AutoSize = true, Location = new Point(1042, 132) };
 
         _rootPathBox.Location = new Point(642, 658);
         _rootPathBox.Size = new Size(330, 24);
