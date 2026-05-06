@@ -19,8 +19,14 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not (Test-Path -LiteralPath $RootPath)) {
-    throw "Root path does not exist: $RootPath"
+if ([string]::IsNullOrWhiteSpace($RootPath)) {
+    $RootPath = (Get-Location).Path
+}
+
+$RootPath = [System.IO.Path]::GetFullPath($RootPath)
+
+if (-not (Test-Path -LiteralPath $RootPath -PathType Container)) {
+    throw "Root path does not exist or is not a directory: $RootPath"
 }
 
 Add-Type -AssemblyName System.Windows.Forms
