@@ -235,7 +235,7 @@ $appTitleLabel.Font = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawi
 $appTitleLabel.Text = 'PowerShell Sync-Thing'
 
 $lblThread = New-Object System.Windows.Forms.Label
-$lblThread.Location = '20,64'; $lblThread.Size = '560,24'
+$lblThread.Location = '600,90'; $lblThread.Size = '520,24'
 $lblThread.Text = "Detected CPU cores: $cpu | Recommended threads: $([Math]::Max(2,[Math]::Min($cpu,16)))"
 
 $numThread = New-Object System.Windows.Forms.NumericUpDown
@@ -273,6 +273,11 @@ $pairGrid.Columns.AddRange($gridColumns)
 $btnAddRow = New-Object System.Windows.Forms.Button; $btnAddRow.Location='20,450'; $btnAddRow.Size='60,32'; $btnAddRow.Text='+'
 $btnStart = New-Object System.Windows.Forms.Button; $btnStart.Location='100,450'; $btnStart.Size='170,32'; $btnStart.Text='Start Sync Server'
 $btnStop = New-Object System.Windows.Forms.Button; $btnStop.Location='280,450'; $btnStop.Size='170,32'; $btnStop.Text='Stop Sync Server'
+$btnAddRow.BackColor = [System.Drawing.Color]::FromArgb(170,230,170)
+$btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,100,0)
+$btnStart.ForeColor = [System.Drawing.Color]::White
+$btnStop.BackColor = [System.Drawing.Color]::FromArgb(139,0,0)
+$btnStop.ForeColor = [System.Drawing.Color]::White
 
 $statusBox = New-Object System.Windows.Forms.TextBox
 $statusBox.Location='20,495'; $statusBox.Size='1120,205'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
@@ -293,6 +298,29 @@ $pairGrid.add_CellContentClick({
         if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathB'].Value = $folderDialog.SelectedPath }
     } elseif ($columnName -eq 'Delete') {
         $pairGrid.Rows.RemoveAt($e.RowIndex)
+    }
+})
+
+$pairGrid.add_CellPainting({
+    param($sender, $e)
+    if ($e.RowIndex -lt 0) { return }
+    $colName = $pairGrid.Columns[$e.ColumnIndex].Name
+    if ($colName -in @('BrowseA','BrowseB','Delete')) {
+        $e.PaintBackground($e.CellBounds, $true)
+        $text = [string]$pairGrid.Rows[$e.RowIndex].Cells[$e.ColumnIndex].FormattedValue
+        $backColor = [System.Drawing.Color]::FromArgb(210,210,210)
+        $foreColor = [System.Drawing.Color]::Black
+        if ($colName -eq 'Delete') {
+            $backColor = [System.Drawing.Color]::FromArgb(139,0,0)
+            $foreColor = [System.Drawing.Color]::White
+        }
+        $rect = New-Object System.Drawing.Rectangle($e.CellBounds.X + 4, $e.CellBounds.Y + 3, $e.CellBounds.Width - 8, $e.CellBounds.Height - 6)
+        [System.Windows.Forms.ControlPaint]::DrawButton($e.Graphics, $rect, [System.Windows.Forms.ButtonState]::Normal)
+        $brush = New-Object System.Drawing.SolidBrush($backColor)
+        $e.Graphics.FillRectangle($brush, $rect)
+        $brush.Dispose()
+        [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $text, $pairGrid.Font, $rect, $foreColor, [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter)
+        $e.Handled = $true
     }
 })
 
