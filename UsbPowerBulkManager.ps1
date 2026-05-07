@@ -127,9 +127,34 @@ $form.Controls.Add($enableWakeBtn)
 $grid = New-Object Windows.Forms.DataGridView
 $grid.Location = New-Object Drawing.Point(15,95)
 $grid.Size = New-Object Drawing.Size(1240,640)
+$grid.AutoGenerateColumns = $false
+$grid.AllowUserToAddRows = $false
+$grid.AllowUserToDeleteRows = $false
+$grid.ReadOnly = $false
 $grid.AutoSizeColumnsMode = 'Fill'
 $grid.SelectionMode = 'FullRowSelect'
 $grid.MultiSelect = $false
+$grid.RowHeadersVisible = $false
+
+$selectedCol = New-Object Windows.Forms.DataGridViewCheckBoxColumn
+$selectedCol.Name = 'Selected'
+$selectedCol.HeaderText = 'Selected'
+$selectedCol.DataPropertyName = 'Selected'
+$selectedCol.FillWeight = 12
+$grid.Columns.Add($selectedCol) | Out-Null
+
+foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeAllowed')) {
+    $col = New-Object Windows.Forms.DataGridViewTextBoxColumn
+    if ($colName -in @('PowerSavingAllowed','WakeAllowed')) {
+        $col = New-Object Windows.Forms.DataGridViewCheckBoxColumn
+    }
+    $col.Name = $colName
+    $col.HeaderText = $colName
+    $col.DataPropertyName = $colName
+    $col.ReadOnly = ($colName -ne 'Selected')
+    $grid.Columns.Add($col) | Out-Null
+}
+
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
@@ -142,8 +167,12 @@ $script:allSelected = $false
 
 function Refresh-Grid {
     $script:deviceRows = @(Get-UsbDevices)
-    $grid.DataSource = $null
-    $grid.DataSource = $script:deviceRows
+    $grid.Rows.Clear()
+
+    foreach ($device in $script:deviceRows) {
+        [void]$grid.Rows.Add($device.Selected, $device.Name, $device.PnpDeviceId, $device.Status, $device.PowerSavingAllowed, $device.WakeAllowed)
+    }
+
     $status.Text = "Loaded $($script:deviceRows.Count) USB devices."
 }
 
@@ -169,10 +198,30 @@ function Apply-Bulk {
     $status.Text = "$ActionName completed for $($targets.Count) selected devices."
 }
 
+
+$grid.add_CellValueChanged({
+    param($sender, $e)
+    if ($e.RowIndex -lt 0 -or $e.ColumnIndex -lt 0) { return }
+
+    $columnName = $grid.Columns[$e.ColumnIndex].Name
+    if ($columnName -ne 'Selected') { return }
+
+    $script:deviceRows[$e.RowIndex].Selected = [bool]$grid.Rows[$e.RowIndex].Cells[$e.ColumnIndex].Value
+})
+
+$grid.add_CurrentCellDirtyStateChanged({
+    if ($grid.IsCurrentCellDirty) {
+        $grid.CommitEdit([Windows.Forms.DataGridViewDataErrorContexts]::Commit)
+    }
+})
+
 $toggleSelect.add_Click({
     $script:allSelected = -not $script:allSelected
-    foreach ($d in $script:deviceRows) { $d.Selected = $script:allSelected }
-    $grid.Refresh()
+    for ($i = 0; $i -lt $script:deviceRows.Count; $i++) {
+        $script:deviceRows[$i].Selected = $script:allSelected
+        $grid.Rows[$i].Cells['Selected'].Value = $script:allSelected
+    }
+
     $toggleSelect.Text = if ($script:allSelected) { 'Select None' } else { 'Select All' }
 })
 
