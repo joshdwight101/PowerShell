@@ -61,6 +61,7 @@ Import-Module .\JDPM.psm1 -Force
 | `RandomStringGenerator.ps1` | Script + GUI | Generates random strings and copies output to clipboard. | Password/token seed generation convenience. |
 | `ShutDown-PC.ps1` | Script | Enforces shutdown behavior during configured windows (often startup task-driven). | Kiosk/lab/energy policy enforcement. |
 | `SuperAdminTool.ps1` | Script | Administrative utility script for elevated workstation/server operations. | Admin action bundling and convenience tasks. |
+| `UsbPowerBulkManager.ps1` | Script + C# GUI | Bulk USB power-management toggling (power saving + wake settings) for selected devices. | Fast remediation/configuration for USB device fleets. |
 | `README.md` | Documentation | Repository overview, usage, and operational guidance. | Start here. |
 | `LICENSE` | Legal | Project license. | Governance/compliance. |
 
@@ -215,6 +216,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\ShutDown-PC.ps1
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LetsEncrypt-CertPowerTool.ps1
 ```
+
+
+### USB power-management bulk utility
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\UsbPowerBulkManager.ps1
+```
+
+Use this tool to quickly select USB devices and bulk-enable/disable:
+- **Allow the computer to turn off this device to save power**
+- **Allow this device to wake the computer**
+
+Includes a **Select All / Select None** toggle and per-device checkbox workflow from a single GUI.
 
 ### Super admin helper
 ```powershell
