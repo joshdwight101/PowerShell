@@ -176,6 +176,17 @@ $status.Location = New-Object Drawing.Point(15,745)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
+
+$contextMenu = New-Object Windows.Forms.ContextMenuStrip
+$ctxSelect = $contextMenu.Items.Add('Check Selected')
+$ctxUnselect = $contextMenu.Items.Add('Uncheck Selected')
+[void]$contextMenu.Items.Add('-')
+$ctxEnableSaving = $contextMenu.Items.Add('Enable Power Saving')
+$ctxDisableSaving = $contextMenu.Items.Add('Disable Power Saving')
+$ctxEnableWake = $contextMenu.Items.Add('Enable Wake on USB')
+$ctxDisableWake = $contextMenu.Items.Add('Disable Wake on USB')
+$grid.ContextMenuStrip = $contextMenu
+
 $script:deviceRows = @()
 $script:allSelected = $false
 $script:isBulkSelecting = $false
@@ -190,7 +201,6 @@ function Refresh-Grid {
             $wakeCell = $grid.Rows[$rowIndex].Cells['WakeAllowed']
             $wakeCell.ReadOnly = $true
             $wakeCell.Style.BackColor = [Drawing.Color]::LightGray
-            $wakeCell.Style.ForeColor = [Drawing.Color]::DimGray
             $wakeCell.ToolTipText = 'Wake on USB is not supported for this device.'
         }
     }
@@ -200,6 +210,16 @@ function Refresh-Grid {
 
 function Get-SelectedRows {
     return @($script:deviceRows | Where-Object { $_.Selected })
+}
+
+
+function Set-SelectedState {
+    param([bool]$Value)
+
+    foreach ($row in @($grid.SelectedRows)) {
+        $row.Cells['Selected'].Value = $Value
+        $script:deviceRows[$row.Index].Selected = $Value
+    }
 }
 
 function Apply-Bulk {
@@ -253,6 +273,41 @@ $grid.add_CurrentCellDirtyStateChanged({
         $grid.CommitEdit([Windows.Forms.DataGridViewDataErrorContexts]::Commit)
     }
 })
+
+
+$grid.add_CellPainting({
+    param($sender, $e)
+    if ($e.RowIndex -lt 0 -or $e.ColumnIndex -lt 0) { return }
+    if ($grid.Columns[$e.ColumnIndex].Name -ne 'WakeAllowed') { return }
+    if ($script:deviceRows[$e.RowIndex].WakeToggleSupported) { return }
+
+    $e.PaintBackground($e.CellBounds, $true)
+    $e.PaintContent($e.CellBounds)
+
+    $pen = New-Object Drawing.Pen([Drawing.Color]::Red, 3)
+    $pad = 4
+    $e.Graphics.DrawLine($pen, $e.CellBounds.Left + $pad, $e.CellBounds.Top + $pad, $e.CellBounds.Right - $pad, $e.CellBounds.Bottom - $pad)
+    $e.Graphics.DrawLine($pen, $e.CellBounds.Right - $pad, $e.CellBounds.Top + $pad, $e.CellBounds.Left + $pad, $e.CellBounds.Bottom - $pad)
+    $pen.Dispose()
+    $e.Handled = $true
+})
+
+$grid.add_CellMouseDown({
+    param($sender, $e)
+    if ($e.Button -ne [Windows.Forms.MouseButtons]::Right -or $e.RowIndex -lt 0) { return }
+
+    if (-not $grid.Rows[$e.RowIndex].Selected) {
+        $grid.ClearSelection()
+        $grid.Rows[$e.RowIndex].Selected = $true
+    }
+})
+
+$ctxSelect.add_Click({ Set-SelectedState -Value $true })
+$ctxUnselect.add_Click({ Set-SelectedState -Value $false })
+$ctxEnableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $true } -ActionName 'Power-saving enable (context)' })
+$ctxDisableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $false } -ActionName 'Power-saving disable (context)' })
+$ctxEnableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $true } } -ActionName 'Wake enable (context)' })
+$ctxDisableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $false } } -ActionName 'Wake disable (context)' })
 
 $toggleSelect.add_Click({
     $script:allSelected = -not $script:allSelected
