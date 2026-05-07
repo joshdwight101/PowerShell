@@ -261,12 +261,15 @@ $colPathA = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
 $colPathA.Name = 'PathA'; $colPathA.HeaderText = 'Directory Path A'; $colPathA.Width = 340
 $colBrowseA = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colBrowseA.Name = 'BrowseA'; $colBrowseA.HeaderText = 'Browse A'; $colBrowseA.Width = 90; $colBrowseA.Text = 'Browse...'; $colBrowseA.UseColumnTextForButtonValue = $true
+$colBrowseA.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colPathB = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
 $colPathB.Name = 'PathB'; $colPathB.HeaderText = 'Directory Path B'; $colPathB.Width = 340
 $colBrowseB = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.Width = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
+$colBrowseB.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colDelete = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.Width = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
+$colDelete.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $gridColumns = [System.Windows.Forms.DataGridViewColumn[]]@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colDelete)
 $pairGrid.Columns.AddRange($gridColumns)
 
@@ -298,29 +301,6 @@ $pairGrid.add_CellContentClick({
         if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathB'].Value = $folderDialog.SelectedPath }
     } elseif ($columnName -eq 'Delete') {
         $pairGrid.Rows.RemoveAt($e.RowIndex)
-    }
-})
-
-$pairGrid.add_CellPainting({
-    param($sender, $e)
-    if ($e.RowIndex -lt 0) { return }
-    $colName = $pairGrid.Columns[$e.ColumnIndex].Name
-    if ($colName -in @('BrowseA','BrowseB','Delete')) {
-        $e.PaintBackground($e.CellBounds, $true)
-        $text = [string]$pairGrid.Rows[$e.RowIndex].Cells[$e.ColumnIndex].FormattedValue
-        $backColor = [System.Drawing.Color]::FromArgb(210,210,210)
-        $foreColor = [System.Drawing.Color]::Black
-        if ($colName -eq 'Delete') {
-            $backColor = [System.Drawing.Color]::FromArgb(139,0,0)
-            $foreColor = [System.Drawing.Color]::White
-        }
-        $rect = New-Object System.Drawing.Rectangle($e.CellBounds.X + 4, $e.CellBounds.Y + 3, $e.CellBounds.Width - 8, $e.CellBounds.Height - 6)
-        [System.Windows.Forms.ControlPaint]::DrawButton($e.Graphics, $rect, [System.Windows.Forms.ButtonState]::Normal)
-        $brush = New-Object System.Drawing.SolidBrush($backColor)
-        $e.Graphics.FillRectangle($brush, $rect)
-        $brush.Dispose()
-        [System.Windows.Forms.TextRenderer]::DrawText($e.Graphics, $text, $pairGrid.Font, $rect, $foreColor, [System.Windows.Forms.TextFormatFlags]::HorizontalCenter -bor [System.Windows.Forms.TextFormatFlags]::VerticalCenter)
-        $e.Handled = $true
     }
 })
 
