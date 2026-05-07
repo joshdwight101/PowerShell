@@ -160,13 +160,13 @@ $txtSqlPass = [System.Windows.Forms.TextBox]::new(); $txtSqlPass.Location='480,8
 
 $lblRuntime = [System.Windows.Forms.Label]::new(); $lblRuntime.Text='Sage Runtime Path:'; $lblRuntime.Location='20,120'; $lblRuntime.AutoSize=$true; $form.Controls.Add($lblRuntime)
 $txtRuntime = [System.Windows.Forms.TextBox]::new(); $txtRuntime.Location='140,116'; $txtRuntime.Size='560,28'; $txtRuntime.Text=$settings.RuntimePath; $form.Controls.Add($txtRuntime)
-$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,114'; $btnBrowseRuntime.Size='100,32'; $form.Controls.Add($btnBrowseRuntime)
+$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,114'; $btnBrowseRuntime.Size='120,36'; $form.Controls.Add($btnBrowseRuntime)
 
 $lblBackupRoot = [System.Windows.Forms.Label]::new(); $lblBackupRoot.Text='Backup Root:'; $lblBackupRoot.Location='20,155'; $lblBackupRoot.AutoSize=$true; $form.Controls.Add($lblBackupRoot)
 $txtBackupRoot = [System.Windows.Forms.TextBox]::new(); $txtBackupRoot.Location='140,151'; $txtBackupRoot.Size='560,28'; $txtBackupRoot.Text=$settings.BackupRoot; $form.Controls.Add($txtBackupRoot)
-$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,149'; $btnBrowseBackup.Size='100,32'; $form.Controls.Add($btnBrowseBackup)
+$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,154'; $btnBrowseBackup.Size='120,36'; $form.Controls.Add($btnBrowseBackup)
 
-$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='840,46'; $btnDetect.Size='120,36'; $form.Controls.Add($btnDetect)
+$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='840,80'; $btnDetect.Size='120,36'; $form.Controls.Add($btnDetect)
 $listDb = [System.Windows.Forms.CheckedListBox]::new(); $listDb.Location='20,205'; $listDb.Size='940,200'; $listDb.CheckOnClick=$true; $form.Controls.Add($listDb)
 
 $lblSageUser = [System.Windows.Forms.Label]::new(); $lblSageUser.Text='Sage Admin User:'; $lblSageUser.Location='20,425'; $lblSageUser.AutoSize=$true; $form.Controls.Add($lblSageUser)
