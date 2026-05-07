@@ -210,15 +210,10 @@ $aboutItem.add_Click({
     $about.ShowDialog() | Out-Null
 })
 $manualItem.add_Click({
-    [System.Windows.Forms.MessageBox]::Show(
-@"
+    $manualText = @"
 PowerShell Sync-Thing - User Manual
 Version: $script:AppVersion
 
-"@,
-        'Manual',
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Information)
 })
 $helpMenu.DropDownItems.AddRange(@($manualItem,$aboutItem))
 
