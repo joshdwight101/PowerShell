@@ -28,7 +28,7 @@ public static class UsbPowerBulkGuiFactory
     {
         var form = new Form();
         form.Text = title;
-        form.Size = new Size(1300, 900);
+        form.Size = new Size(1300, 880);
         form.StartPosition = FormStartPosition.CenterScreen;
         return form;
     }
@@ -70,6 +70,7 @@ function Get-UsbDevices {
         if (-not $wakeDetectionAvailable) { $wakeSupported = $true }
         $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
         $powerSupported = $powerSavingState.Supported
+        if (-not ($powerSupported -or $wakeSupported)) { continue }
         [pscustomobject]@{
             Selected = $false
             Name = $d.Name
@@ -86,16 +87,15 @@ function Get-UsbDevices {
 function Get-PowerSavingState {
     param([string]$PnpDeviceId)
     try {
-        $normalizedId = $PnpDeviceId -replace '\\\\','\'
-        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$normalizedId\Device Parameters"
-        if (-not (Test-Path $regPath)) {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$PnpDeviceId\Device Parameters"
+        if (-not (Test-Path -LiteralPath $regPath)) {
             return @{
                 Supported = $true
                 Allowed = $true
             }
         }
 
-        $value = (Get-ItemProperty -Path $regPath -Name PnPCapabilities -ErrorAction SilentlyContinue).PnPCapabilities
+        $value = (Get-ItemProperty -LiteralPath $regPath -Name PnPCapabilities -ErrorAction SilentlyContinue).PnPCapabilities
         if ($null -eq $value) {
             return @{
                 Supported = $true
@@ -178,7 +178,7 @@ $form.Controls.Add($searchBox)
 
 $grid = New-Object Windows.Forms.DataGridView
 $grid.Location = New-Object Drawing.Point(15,120)
-$grid.Size = New-Object Drawing.Size(1240,700)
+$grid.Size = New-Object Drawing.Size(1240,660)
 $grid.AutoGenerateColumns = $false
 $grid.AllowUserToAddRows = $false
 $grid.AllowUserToDeleteRows = $false
@@ -187,6 +187,7 @@ $grid.AutoSizeColumnsMode = 'Fill'
 $grid.SelectionMode = 'FullRowSelect'
 $grid.MultiSelect = $true
 $grid.RowHeadersVisible = $false
+$grid.ScrollBars = [Windows.Forms.ScrollBars]::Both
 
 $selectedCol = New-Object Windows.Forms.DataGridViewCheckBoxColumn
 $selectedCol.Name = 'Selected'
@@ -213,7 +214,7 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,835)
+$status.Location = New-Object Drawing.Point(15,790)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
