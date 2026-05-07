@@ -28,7 +28,7 @@ public static class UsbPowerBulkGuiFactory
     {
         var form = new Form();
         form.Text = title;
-        form.Size = new Size(1300, 900);
+        form.Size = new Size(1300, 880);
         form.StartPosition = FormStartPosition.CenterScreen;
         return form;
     }
@@ -90,8 +90,8 @@ function Get-PowerSavingState {
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$PnpDeviceId\Device Parameters"
         if (-not (Test-Path -LiteralPath $regPath)) {
             return @{
-                Supported = $false
-                Allowed = $false
+                Supported = $true
+                Allowed = $true
             }
         }
 
@@ -178,7 +178,7 @@ $form.Controls.Add($searchBox)
 
 $grid = New-Object Windows.Forms.DataGridView
 $grid.Location = New-Object Drawing.Point(15,120)
-$grid.Size = New-Object Drawing.Size(1240,730)
+$grid.Size = New-Object Drawing.Size(1240,660)
 $grid.AutoGenerateColumns = $false
 $grid.AllowUserToAddRows = $false
 $grid.AllowUserToDeleteRows = $false
@@ -214,7 +214,7 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,860)
+$status.Location = New-Object Drawing.Point(15,790)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
