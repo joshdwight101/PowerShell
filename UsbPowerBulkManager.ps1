@@ -62,7 +62,7 @@ function Get-PowerCfgDeviceSet {
 function Get-UsbDevices {
     $wakeArmedDevices = Get-PowerCfgDeviceSet -QueryType 'wake_armed'
     $wakeProgrammableDevices = Get-PowerCfgDeviceSet -QueryType 'wake_programmable'
-    $wakeDetectionAvailable = ($wakeProgrammableDevices.Count -gt 0)
+    $wakeDetectionAvailable = (@($wakeProgrammableDevices).Count -gt 0)
 
     $devices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' -and $_.ConfigManagerErrorCode -eq 0 }
     foreach ($d in $devices) {
