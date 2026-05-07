@@ -126,8 +126,14 @@ function Start-SyncPair {
 
         while ($true) {
             $msgs = @()
-            $msgs += Sync-Directory -Source $pair.PathA -Destination $pair.PathB
-            $msgs += Sync-Directory -Source $pair.PathB -Destination $pair.PathA
+            switch ($pair.Mode) {
+                'BtoA' { $msgs += Sync-Directory -Source $pair.PathB -Destination $pair.PathA }
+                'AtoB' { $msgs += Sync-Directory -Source $pair.PathA -Destination $pair.PathB }
+                default {
+                    $msgs += Sync-Directory -Source $pair.PathA -Destination $pair.PathB
+                    $msgs += Sync-Directory -Source $pair.PathB -Destination $pair.PathA
+                }
+            }
             if ($msgs.Count -eq 0) { "IDLE: No changes for pair '$($pair.Name)'" } else { $msgs }
             Start-Sleep -Milliseconds $settings.App.PollingMs
         }
@@ -181,7 +187,7 @@ $aboutItem.add_Click({
 
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Location = '20,20'; $lbl.Size = '470,170'
-    $lbl.Text = "$script:AppTitle v$script:AppVersion`r`nAuthor: $script:Author`r`n`r`nPurpose:`r`nEnterprise-friendly multi-threaded, 2-way folder synchronization manager.`r`n`r`nKey Uses:`r`n- Manage many sync pairs`r`n- Start/Stop sync workers`r`n- Verbose status + persistent logging"
+    $lbl.Text = "$script:AppTitle v$script:AppVersion`r`nAuthor: $script:Author`r`n`r`nPurpose:`r`nEnterprise-friendly sync manager with 1-way/2-way modes and UNC-aware path entry.`r`n`r`nKey Uses:`r`n- Manage many sync pairs in-grid`r`n- Per-pair sync mode toggle (B→A, A→B, 2-way)`r`n- Start/Stop sync workers`r`n- Verbose status + persistent logging"
 
     $lnk = New-Object System.Windows.Forms.LinkLabel
     $lnk.Location = '20,200'; $lnk.Size = '470,24'
@@ -267,10 +273,13 @@ $colPathB.Name = 'PathB'; $colPathB.HeaderText = 'Directory Path B'; $colPathB.W
 $colBrowseB = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.Width = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
 $colBrowseB.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
+$colMode = New-Object System.Windows.Forms.DataGridViewButtonColumn
+$colMode.Name = 'Mode'; $colMode.HeaderText = 'Sync Mode'; $colMode.Width = 120; $colMode.Text = '<--2-way-->'; $colMode.UseColumnTextForButtonValue = $false
+$colMode.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colDelete = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.Width = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
 $colDelete.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
-$gridColumns = [System.Windows.Forms.DataGridViewColumn[]]@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colDelete)
+$gridColumns = [System.Windows.Forms.DataGridViewColumn[]]@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colMode,$colDelete)
 $pairGrid.Columns.AddRange($gridColumns)
 
 $btnAddRow = New-Object System.Windows.Forms.Button; $btnAddRow.Location='20,450'; $btnAddRow.Size='60,32'; $btnAddRow.Text='+'
@@ -285,10 +294,15 @@ $btnStop.ForeColor = [System.Drawing.Color]::White
 $statusBox = New-Object System.Windows.Forms.TextBox
 $statusBox.Location='20,495'; $statusBox.Size='1120,205'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
 
-$folderDialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$pathPicker = New-Object System.Windows.Forms.OpenFileDialog
+$pathPicker.CheckFileExists = $false
+$pathPicker.CheckPathExists = $true
+$pathPicker.ValidateNames = $false
+$pathPicker.FileName = 'Select Folder'
+$pathPicker.Title = 'Select folder (supports UNC paths)'
 
 $btnAddRow.add_Click({
-    $pairGrid.Rows.Add('','','','','','') | Out-Null
+    $pairGrid.Rows.Add('','','Browse...','','Browse...','<--2-way-->','Delete') | Out-Null
 })
 
 $pairGrid.add_CellContentClick({
@@ -296,9 +310,13 @@ $pairGrid.add_CellContentClick({
     if ($e.RowIndex -lt 0) { return }
     $columnName = $pairGrid.Columns[$e.ColumnIndex].Name
     if ($columnName -eq 'BrowseA') {
-        if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathA'].Value = $folderDialog.SelectedPath }
+        if ($pathPicker.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathA'].Value = Split-Path $pathPicker.FileName -Parent }
     } elseif ($columnName -eq 'BrowseB') {
-        if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathB'].Value = $folderDialog.SelectedPath }
+        if ($pathPicker.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathB'].Value = Split-Path $pathPicker.FileName -Parent }
+    } elseif ($columnName -eq 'Mode') {
+        $current = [string]$pairGrid.Rows[$e.RowIndex].Cells['Mode'].Value
+        $next = switch ($current) { '<--2-way-->' { '<--' } '<--' { '-->' } default { '<--2-way-->' } }
+        $pairGrid.Rows[$e.RowIndex].Cells['Mode'].Value = $next
     } elseif ($columnName -eq 'Delete') {
         $pairGrid.Rows.RemoveAt($e.RowIndex)
     }
@@ -311,8 +329,10 @@ $btnStart.add_Click({
         $name = [string]$row.Cells['Name'].Value
         $pathA = [string]$row.Cells['PathA'].Value
         $pathB = [string]$row.Cells['PathB'].Value
+        $modeLabel = [string]$row.Cells['Mode'].Value
+        $modeValue = switch ($modeLabel) { '<--' { 'BtoA' } '-->' { 'AtoB' } default { 'TwoWay' } }
         if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($pathA) -or [string]::IsNullOrWhiteSpace($pathB)) { continue }
-        $script:syncPairs.Add([ordered]@{ Name = $name.Trim(); PathA = $pathA.Trim(); PathB = $pathB.Trim() })
+        $script:syncPairs.Add([ordered]@{ Name = $name.Trim(); PathA = $pathA.Trim(); PathB = $pathB.Trim(); Mode = $modeValue })
     }
     $settings.SyncPairs = @($script:syncPairs)
     Save-Settings $settings
@@ -323,15 +343,26 @@ $btnStop.add_Click({ Stop-AllSync -settings $settings -statusBox $statusBox; Wri
 
 $settingsItem.add_Click({
     $dlg = New-Object System.Windows.Forms.Form
-    $dlg.Text = 'Application Options'; $dlg.Size = '520,380'
+    $dlg.Text = 'Application Options'; $dlg.Size = '620,450'
+    $tabs = New-Object System.Windows.Forms.TabControl
+    $tabs.Location='10,10'; $tabs.Size='585,360'
+    $tabMain = New-Object System.Windows.Forms.TabPage('Main')
+    $tabLogging = New-Object System.Windows.Forms.TabPage('Logging')
+    $mainLabel = New-Object System.Windows.Forms.Label
+    $mainLabel.Location='20,20'; $mainLabel.Size='400,30'; $mainLabel.Text='Main application options will be added here.'
+    $tabMain.Controls.Add($mainLabel)
 
-    $txtLogName = New-Object System.Windows.Forms.TextBox; $txtLogName.Location='20,30'; $txtLogName.Size='460,24'; $txtLogName.Text=$settings.Logging.FileName
-    $txtLogDir = New-Object System.Windows.Forms.TextBox; $txtLogDir.Location='20,80'; $txtLogDir.Size='460,24'; $txtLogDir.Text=$settings.Logging.LogDirectory
-    $cmbMode = New-Object System.Windows.Forms.ComboBox; $cmbMode.Location='20,130'; $cmbMode.Size='200,24'; $cmbMode.Items.AddRange(@('Append','Overwrite')); $cmbMode.Text=$settings.Logging.Mode
-    $numMax = New-Object System.Windows.Forms.NumericUpDown; $numMax.Location='240,130'; $numMax.Size='120,24'; $numMax.Minimum=1; $numMax.Maximum=1024; $numMax.Value=[decimal]$settings.Logging.MaxFileMB
-    $chkPrune = New-Object System.Windows.Forms.CheckBox; $chkPrune.Location='20,170'; $chkPrune.Text='Enable auto pruning'; $chkPrune.Checked=[bool]$settings.Logging.AutoPrune
-    $chkVerbose = New-Object System.Windows.Forms.CheckBox; $chkVerbose.Location='20,200'; $chkVerbose.Text='Verbose console logging'; $chkVerbose.Checked=[bool]$settings.Logging.Verbose
-    $btnSave = New-Object System.Windows.Forms.Button; $btnSave.Location='20,250'; $btnSave.Size='120,30'; $btnSave.Text='Save'
+    $lblLogName = New-Object System.Windows.Forms.Label; $lblLogName.Location='20,20'; $lblLogName.Size='160,20'; $lblLogName.Text='Log File Name'
+    $txtLogName = New-Object System.Windows.Forms.TextBox; $txtLogName.Location='20,42'; $txtLogName.Size='520,24'; $txtLogName.Text=$settings.Logging.FileName
+    $lblLogDir = New-Object System.Windows.Forms.Label; $lblLogDir.Location='20,76'; $lblLogDir.Size='220,20'; $lblLogDir.Text='Log Directory'
+    $txtLogDir = New-Object System.Windows.Forms.TextBox; $txtLogDir.Location='20,98'; $txtLogDir.Size='520,24'; $txtLogDir.Text=$settings.Logging.LogDirectory
+    $lblMode = New-Object System.Windows.Forms.Label; $lblMode.Location='20,132'; $lblMode.Size='120,20'; $lblMode.Text='Log Mode'
+    $cmbMode = New-Object System.Windows.Forms.ComboBox; $cmbMode.Location='20,154'; $cmbMode.Size='220,24'; $cmbMode.Items.AddRange(@('Append','Overwrite')); $cmbMode.Text=$settings.Logging.Mode
+    $lblMax = New-Object System.Windows.Forms.Label; $lblMax.Location='260,132'; $lblMax.Size='180,20'; $lblMax.Text='Max File Size (MB)'
+    $numMax = New-Object System.Windows.Forms.NumericUpDown; $numMax.Location='260,154'; $numMax.Size='140,24'; $numMax.Minimum=1; $numMax.Maximum=1024; $numMax.Value=[decimal]$settings.Logging.MaxFileMB
+    $chkPrune = New-Object System.Windows.Forms.CheckBox; $chkPrune.Location='20,194'; $chkPrune.Size='220,24'; $chkPrune.Text='Enable auto pruning'; $chkPrune.Checked=[bool]$settings.Logging.AutoPrune
+    $chkVerbose = New-Object System.Windows.Forms.CheckBox; $chkVerbose.Location='20,224'; $chkVerbose.Size='240,24'; $chkVerbose.Text='Verbose console logging'; $chkVerbose.Checked=[bool]$settings.Logging.Verbose
+    $btnSave = New-Object System.Windows.Forms.Button; $btnSave.Location='20,265'; $btnSave.Size='120,30'; $btnSave.Text='Save'
 
     $btnSave.add_Click({
         $settings.Logging.FileName = $txtLogName.Text
@@ -345,14 +376,18 @@ $settingsItem.add_Click({
         $dlg.Close()
     })
 
-    $dlg.Controls.AddRange(@($txtLogName,$txtLogDir,$cmbMode,$numMax,$chkPrune,$chkVerbose,$btnSave))
+    $tabLogging.Controls.AddRange(@($lblLogName,$txtLogName,$lblLogDir,$txtLogDir,$lblMode,$cmbMode,$lblMax,$numMax,$chkPrune,$chkVerbose,$btnSave))
+    $tabs.TabPages.Add($tabMain) | Out-Null
+    $tabs.TabPages.Add($tabLogging) | Out-Null
+    $dlg.Controls.Add($tabs)
     $dlg.ShowDialog() | Out-Null
 })
 
 # Load saved pairs
 foreach ($p in $settings.SyncPairs) {
-    $script:syncPairs.Add([ordered]@{ Name=$p.Name; PathA=$p.PathA; PathB=$p.PathB })
-    $pairGrid.Rows.Add($p.Name,$p.PathA,'Browse...',$p.PathB,'Browse...','Delete') | Out-Null
+    $modeLabel = switch ($p.Mode) { 'BtoA' { '<--' } 'AtoB' { '-->' } default { '<--2-way-->' } }
+    $script:syncPairs.Add([ordered]@{ Name=$p.Name; PathA=$p.PathA; PathB=$p.PathB; Mode=$p.Mode })
+    $pairGrid.Rows.Add($p.Name,$p.PathA,'Browse...',$p.PathB,'Browse...',$modeLabel,'Delete') | Out-Null
 }
 
 $form.Controls.AddRange(@($appTitleLabel,$lblThread,$numThread,$pairGridLabel,$pairGrid,$btnAddRow,$btnStart,$btnStop,$statusBox))
