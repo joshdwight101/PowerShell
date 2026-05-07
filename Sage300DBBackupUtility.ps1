@@ -85,7 +85,8 @@ function Invoke-SageDbDumpBackup {
     param(
         [string]$RuntimePath,[string]$BackupRoot,[string[]]$DatabaseNames,
         [string]$SageAdminUser,[string]$SageAdminPassword,
-        [System.Windows.Forms.TextBox]$LogBox,[System.Windows.Forms.ProgressBar]$ProgressBar,[System.Windows.Forms.Label]$EtaLabel
+        [System.Windows.Forms.TextBox]$LogBox,[System.Windows.Forms.ProgressBar]$ProgressBar,[System.Windows.Forms.Label]$EtaLabel,
+        [scriptblock]$IsCancelled
     )
 
     $dbDumpPath = Join-Path $RuntimePath 'dbdump32.exe'
@@ -99,6 +100,10 @@ function Invoke-SageDbDumpBackup {
     $i = 0
 
     foreach ($db in $DatabaseNames) {
+        if (& $IsCancelled) {
+            Write-UiLog -TextBox $LogBox -Message 'Cancellation requested before next database. Stopping backup run.'
+            break
+        }
         $i++
         $friendlyTime = Get-Date -Format 'yyyy-MM-dd_hh-mm-ss_tt'
         $dbFolder = Join-Path $runFolder ("{0}_backup_{1}" -f $db, $friendlyTime)
@@ -107,8 +112,22 @@ function Invoke-SageDbDumpBackup {
         Write-UiLog -TextBox $LogBox -Message "Starting backup for $db"
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $args = @("/U$SageAdminUser", "/P$SageAdminPassword", "/L$db", '/Q', "/D$dbFolder")
-        $proc = Start-Process -FilePath $dbDumpPath -ArgumentList $args -WorkingDirectory $RuntimePath -PassThru -Wait -NoNewWindow
+        $proc = Start-Process -FilePath $dbDumpPath -ArgumentList $args -WorkingDirectory $RuntimePath -PassThru -NoNewWindow
+        $script:currentBackupProcess = $proc
+        while (-not $proc.HasExited) {
+            if (& $IsCancelled) {
+                Write-UiLog -TextBox $LogBox -Message "Cancellation requested. Stopping active backup process for $db..."
+                try { $proc.Kill() } catch {}
+                break
+            }
+            Start-Sleep -Milliseconds 250
+            [System.Windows.Forms.Application]::DoEvents()
+        }
         $sw.Stop()
+        if (& $IsCancelled) {
+            Write-UiLog -TextBox $LogBox -Message 'Backup run cancelled by user.'
+            break
+        }
 
         if ($proc.ExitCode -ne 0) {
             Write-UiLog -TextBox $LogBox -Message "Backup FAILED for $db (exit code $($proc.ExitCode))"
@@ -129,6 +148,9 @@ function Invoke-SageDbDumpBackup {
 
 $settings = Load-AppSettings -Path $SettingsPath
 $saveGuard = $false
+$script:isBackupRunning = $false
+$script:cancelBackup = $false
+$script:currentBackupProcess = $null
 
 $form = [System.Windows.Forms.Form]::new()
 $form.Text = "$AppTitle $Version  |  Author: $Author"
@@ -160,20 +182,20 @@ $txtSqlPass = [System.Windows.Forms.TextBox]::new(); $txtSqlPass.Location='480,8
 
 $lblRuntime = [System.Windows.Forms.Label]::new(); $lblRuntime.Text='Sage Runtime Path:'; $lblRuntime.Location='20,120'; $lblRuntime.AutoSize=$true; $form.Controls.Add($lblRuntime)
 $txtRuntime = [System.Windows.Forms.TextBox]::new(); $txtRuntime.Location='140,116'; $txtRuntime.Size='560,28'; $txtRuntime.Text=$settings.RuntimePath; $form.Controls.Add($txtRuntime)
-$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,118'; $btnBrowseRuntime.Size='120,36'; $form.Controls.Add($btnBrowseRuntime)
+$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,118'; $btnBrowseRuntime.Size='120,36'; $btnBrowseRuntime.BackColor=[System.Drawing.Color]::FromArgb(225,225,225); $form.Controls.Add($btnBrowseRuntime)
 
 $lblBackupRoot = [System.Windows.Forms.Label]::new(); $lblBackupRoot.Text='Backup Root:'; $lblBackupRoot.Location='20,155'; $lblBackupRoot.AutoSize=$true; $form.Controls.Add($lblBackupRoot)
 $txtBackupRoot = [System.Windows.Forms.TextBox]::new(); $txtBackupRoot.Location='140,151'; $txtBackupRoot.Size='560,28'; $txtBackupRoot.Text=$settings.BackupRoot; $form.Controls.Add($txtBackupRoot)
-$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,160'; $btnBrowseBackup.Size='120,36'; $form.Controls.Add($btnBrowseBackup)
+$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,160'; $btnBrowseBackup.Size='120,36'; $btnBrowseBackup.BackColor=[System.Drawing.Color]::FromArgb(225,225,225); $form.Controls.Add($btnBrowseBackup)
 
-$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='720,76'; $btnDetect.Size='120,36'; $form.Controls.Add($btnDetect)
+$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='720,76'; $btnDetect.Size='120,36'; $btnDetect.BackColor=[System.Drawing.Color]::FromArgb(225,225,225); $form.Controls.Add($btnDetect)
 $listDb = [System.Windows.Forms.CheckedListBox]::new(); $listDb.Location='20,205'; $listDb.Size='940,200'; $listDb.CheckOnClick=$true; $form.Controls.Add($listDb)
 
 $lblSageUser = [System.Windows.Forms.Label]::new(); $lblSageUser.Text='Sage Admin User:'; $lblSageUser.Location='20,425'; $lblSageUser.AutoSize=$true; $form.Controls.Add($lblSageUser)
 $txtSageUser = [System.Windows.Forms.TextBox]::new(); $txtSageUser.Location='160,420'; $txtSageUser.Size='180,28'; $txtSageUser.Text=$settings.SageAdminUser; $form.Controls.Add($txtSageUser)
 $lblSagePass = [System.Windows.Forms.Label]::new(); $lblSagePass.Text='Sage Admin Password:'; $lblSagePass.Location='360,425'; $lblSagePass.AutoSize=$true; $form.Controls.Add($lblSagePass)
 $txtSagePass = [System.Windows.Forms.TextBox]::new(); $txtSagePass.Location='530,420'; $txtSagePass.Size='220,28'; $txtSagePass.Text=$settings.SageAdminPassword; $txtSagePass.UseSystemPasswordChar=$true; $form.Controls.Add($txtSagePass)
-$btnStart = [System.Windows.Forms.Button]::new(); $btnStart.Text='Start Sequential Backup'; $btnStart.Location='780,418'; $btnStart.Size='180,34'; $form.Controls.Add($btnStart)
+$btnStart = [System.Windows.Forms.Button]::new(); $btnStart.Text='Start Backup'; $btnStart.Location='760,418'; $btnStart.Size='180,34'; $btnStart.BackColor=[System.Drawing.Color]::FromArgb(198,239,206); $form.Controls.Add($btnStart)
 
 $progress = [System.Windows.Forms.ProgressBar]::new(); $progress.Location='20,465'; $progress.Size='940,24'; $progress.Minimum=0; $progress.Maximum=100; $form.Controls.Add($progress)
 $lblEta = [System.Windows.Forms.Label]::new(); $lblEta.Text='Estimated time remaining: --:--:--'; $lblEta.Location='20,495'; $lblEta.AutoSize=$true; $form.Controls.Add($lblEta)
@@ -265,20 +287,47 @@ $btnDetect.Add_Click({
 })
 
 $btnStart.Add_Click({
-    try {
-        if ($listDb.CheckedItems.Count -eq 0) {
-            [System.Windows.Forms.MessageBox]::Show('Select at least one database to backup.', 'No databases selected', 'OK', 'Warning') | Out-Null
-            return
+    if (-not $script:isBackupRunning) {
+        try {
+            if ($listDb.CheckedItems.Count -eq 0) {
+                [System.Windows.Forms.MessageBox]::Show('Select at least one database to backup.', 'No databases selected', 'OK', 'Warning') | Out-Null
+                return
+            }
+            $selected = @(); foreach ($item in $listDb.CheckedItems) { $selected += [string]$item }
+            $script:isBackupRunning = $true
+            $script:cancelBackup = $false
+            $btnStart.Text = 'Stop Backup'
+            $btnStart.BackColor = [System.Drawing.Color]::FromArgb(255,199,206)
+            Write-UiLog -TextBox $logBox -Message "Backup job started. Selected DBs: $($selected -join ', ')"
+            $progress.Value = 0
+            Invoke-SageDbDumpBackup -RuntimePath $txtRuntime.Text -BackupRoot $txtBackupRoot.Text -DatabaseNames $selected -SageAdminUser $txtSageUser.Text -SageAdminPassword $txtSagePass.Text -LogBox $logBox -ProgressBar $progress -EtaLabel $lblEta -IsCancelled { $script:cancelBackup }
+            if ($script:cancelBackup) {
+                Write-UiLog -TextBox $logBox -Message 'Backup operation ended due to cancellation request.'
+            } else {
+                Write-UiLog -TextBox $logBox -Message 'All selected database backups completed successfully.'
+                [System.Windows.Forms.MessageBox]::Show('Backup completed successfully.', 'Complete', 'OK', 'Information') | Out-Null
+            }
+        } catch {
+            Write-UiLog -TextBox $logBox -Message "Backup error: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Backup failed', 'OK', 'Error') | Out-Null
+        } finally {
+            $script:isBackupRunning = $false
+            $script:cancelBackup = $false
+            $script:currentBackupProcess = $null
+            $btnStart.Text = 'Start Backup'
+            $btnStart.BackColor = [System.Drawing.Color]::FromArgb(198,239,206)
         }
-        $selected = @(); foreach ($item in $listDb.CheckedItems) { $selected += [string]$item }
-        Write-UiLog -TextBox $logBox -Message "Backup job started. Selected DBs: $($selected -join ', ')"
-        $progress.Value = 0
-        Invoke-SageDbDumpBackup -RuntimePath $txtRuntime.Text -BackupRoot $txtBackupRoot.Text -DatabaseNames $selected -SageAdminUser $txtSageUser.Text -SageAdminPassword $txtSagePass.Text -LogBox $logBox -ProgressBar $progress -EtaLabel $lblEta
-        Write-UiLog -TextBox $logBox -Message 'All selected database backups completed successfully.'
-        [System.Windows.Forms.MessageBox]::Show('Backup completed successfully.', 'Complete', 'OK', 'Information') | Out-Null
-    } catch {
-        Write-UiLog -TextBox $logBox -Message "Backup error: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Backup failed', 'OK', 'Error') | Out-Null
+    } else {
+        $script:cancelBackup = $true
+        Write-UiLog -TextBox $logBox -Message 'Stop requested by user. Attempting graceful cancellation...'
+        if ($script:currentBackupProcess -and -not $script:currentBackupProcess.HasExited) {
+            try {
+                $script:currentBackupProcess.Kill()
+                Write-UiLog -TextBox $logBox -Message 'Active backup process terminated.'
+            } catch {
+                Write-UiLog -TextBox $logBox -Message "Unable to terminate active process cleanly: $($_.Exception.Message)"
+            }
+        }
     }
 })
 
