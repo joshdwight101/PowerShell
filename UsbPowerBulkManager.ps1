@@ -221,8 +221,8 @@ function Refresh-Grid {
             $wakeTextCell.Style.SelectionForeColor = [Drawing.Color]::DimGray
             $wakeTextCell.Style.Alignment = [Windows.Forms.DataGridViewContentAlignment]::MiddleLeft
             $wakeTextCell.ToolTipText = 'Feature Unavailable for this device.'
-            $wakeTextCell.ReadOnly = $true
             $grid.Rows[$rowIndex].Cells['WakeAllowed'] = $wakeTextCell
+            $grid.Rows[$rowIndex].Cells['WakeAllowed'].ReadOnly = $true
         }
     }
 
