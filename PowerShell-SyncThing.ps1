@@ -267,7 +267,8 @@ $colBrowseB = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.Width = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
 $colDelete = New-Object System.Windows.Forms.DataGridViewButtonColumn
 $colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.Width = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
-$pairGrid.Columns.AddRange(@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colDelete))
+$gridColumns = [System.Windows.Forms.DataGridViewColumn[]]@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colDelete)
+$pairGrid.Columns.AddRange($gridColumns)
 
 $btnAddRow = New-Object System.Windows.Forms.Button; $btnAddRow.Location='20,450'; $btnAddRow.Size='60,32'; $btnAddRow.Text='+'
 $btnStart = New-Object System.Windows.Forms.Button; $btnStart.Location='100,450'; $btnStart.Size='170,32'; $btnStart.Text='Start Sync Server'
