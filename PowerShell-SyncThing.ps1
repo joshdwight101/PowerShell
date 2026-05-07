@@ -2,6 +2,8 @@
 <#!
 .SYNOPSIS
   PowerShell SyncThing by Joshua Dwight
+.VERSION
+  1.0.0
 .DESCRIPTION
   Multi-threaded 2-way sync manager with a C# (WinForms) GUI hosted in PowerShell.
 #>
@@ -167,7 +169,7 @@ $settings = Initialize-Settings
 $cpu = [Environment]::ProcessorCount
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "$script:AppTitle by $script:Author"
+$form.Text = "$script:AppTitle v$script:AppVersion by $script:Author"
 $form.Size = New-Object System.Drawing.Size(1180, 760)
 $form.StartPosition = 'CenterScreen'
 $form.WindowState = 'Maximized'
@@ -210,24 +212,9 @@ $aboutItem.add_Click({
 $manualItem.add_Click({
     [System.Windows.Forms.MessageBox]::Show(
 @"
-Manual - PowerShell SyncThing
+PowerShell Sync-Thing - User Manual
+Version: $script:AppVersion
 
-1) Add a Sync Pair:
-   - Provide Name, Path A, Path B then click 'Add/Update Pair'.
-2) Manage Threading:
-   - Set worker thread cap based on CPU recommendation.
-3) Start/Stop:
-   - Click 'Start Sync Server' to begin all configured sync pairs.
-   - Click 'Stop Sync Server' to halt workers.
-4) Logging:
-   - Use Options > Application Settings to customize file name, location,
-     append/overwrite behavior, prune mode, and max log size.
-5) Auto-save:
-   - Settings and sync pair definitions auto-save on exit and when updated.
-
-Tips:
-- Keep folders on fast local storage for best performance.
-- Keep thread count around the recommended value for optimal throughput.
 "@,
         'Manual',
         [System.Windows.Forms.MessageBoxButtons]::OK,
