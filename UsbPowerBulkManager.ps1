@@ -62,10 +62,12 @@ function Get-PowerCfgDeviceSet {
 function Get-UsbDevices {
     $wakeArmedDevices = Get-PowerCfgDeviceSet -QueryType 'wake_armed'
     $wakeProgrammableDevices = Get-PowerCfgDeviceSet -QueryType 'wake_programmable'
+    $wakeDetectionAvailable = ($wakeProgrammableDevices.Count -gt 0)
 
     $devices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' -and $_.ConfigManagerErrorCode -eq 0 }
     foreach ($d in $devices) {
-        $wakeSupported = $wakeProgrammableDevices.Contains($d.Name)
+        $wakeSupported = $wakeDetectionAvailable -and ($wakeProgrammableDevices.Contains($d.Name) -or $wakeProgrammableDevices.Contains($d.PNPDeviceID))
+        if (-not $wakeDetectionAvailable) { $wakeSupported = $true }
         $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
         $powerSupported = $powerSavingState.Supported
         [pscustomobject]@{
@@ -84,11 +86,12 @@ function Get-UsbDevices {
 function Get-PowerSavingState {
     param([string]$PnpDeviceId)
     try {
-        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$PnpDeviceId\Device Parameters"
+        $normalizedId = $PnpDeviceId -replace '\\\\','\'
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$normalizedId\Device Parameters"
         if (-not (Test-Path $regPath)) {
             return @{
-                Supported = $false
-                Allowed = $false
+                Supported = $true
+                Allowed = $true
             }
         }
 
