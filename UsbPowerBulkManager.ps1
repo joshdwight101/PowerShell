@@ -55,25 +55,37 @@ function Get-UsbDevices {
     $devices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' -and $_.ConfigManagerErrorCode -eq 0 }
     foreach ($d in $devices) {
         $wakeSupported = $wakeProgrammableDevices.Contains($d.Name)
+        $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
+        $powerSupported = $powerSavingState.Supported
+        if (-not ($wakeSupported -or $powerSupported)) { continue }
         [pscustomobject]@{
             Selected = $false
             Name = $d.Name
             PnpDeviceId = $d.PNPDeviceID
             Status = $d.Status
-            PowerSavingAllowed = (Get-PowerSavingAllowed -PnpDeviceId $d.PNPDeviceID)
+            PowerSavingAllowed = $powerSavingState.Allowed
+            PowerSavingToggleSupported = $powerSupported
             WakeAllowed = ($wakeSupported -and $wakeArmedDevices.Contains($d.Name))
             WakeToggleSupported = $wakeSupported
         }
     }
 }
 
-function Get-PowerSavingAllowed {
+function Get-PowerSavingState {
     param([string]$PnpDeviceId)
     try {
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$PnpDeviceId\Device Parameters"
         $value = (Get-ItemProperty -Path $regPath -Name PnPCapabilities -ErrorAction Stop).PnPCapabilities
-        return -not (($value -band 0x20) -eq 0x20)
-    } catch { return $true }
+        return @{
+            Supported = $true
+            Allowed = (-not (($value -band 0x20) -eq 0x20))
+        }
+    } catch {
+        return @{
+            Supported = $false
+            Allowed = $false
+        }
+    }
 }
 
 function Set-PowerSavingAllowed {
@@ -126,29 +138,16 @@ $refreshBtn.Size = New-Object Drawing.Size(110,32)
 $refreshBtn.Text = 'Refresh'
 $form.Controls.Add($refreshBtn)
 
-$disableSavingBtn = New-Object Windows.Forms.Button
-$disableSavingBtn.Location = New-Object Drawing.Point(305,75)
-$disableSavingBtn.Size = New-Object Drawing.Size(220,32)
-$disableSavingBtn.Text = 'Disable Power Saving (Uncheck)'
-$form.Controls.Add($disableSavingBtn)
+$searchLabel = New-Object Windows.Forms.Label
+$searchLabel.Location = New-Object Drawing.Point(305,82)
+$searchLabel.Size = New-Object Drawing.Size(70,24)
+$searchLabel.Text = 'Search:'
+$form.Controls.Add($searchLabel)
 
-$enableSavingBtn = New-Object Windows.Forms.Button
-$enableSavingBtn.Location = New-Object Drawing.Point(535,75)
-$enableSavingBtn.Size = New-Object Drawing.Size(220,32)
-$enableSavingBtn.Text = 'Enable Power Saving (Check)'
-$form.Controls.Add($enableSavingBtn)
-
-$disableWakeBtn = New-Object Windows.Forms.Button
-$disableWakeBtn.Location = New-Object Drawing.Point(765,75)
-$disableWakeBtn.Size = New-Object Drawing.Size(220,32)
-$disableWakeBtn.Text = 'Disable Wake on USB'
-$form.Controls.Add($disableWakeBtn)
-
-$enableWakeBtn = New-Object Windows.Forms.Button
-$enableWakeBtn.Location = New-Object Drawing.Point(995,75)
-$enableWakeBtn.Size = New-Object Drawing.Size(220,32)
-$enableWakeBtn.Text = 'Enable Wake on USB'
-$form.Controls.Add($enableWakeBtn)
+$searchBox = New-Object Windows.Forms.TextBox
+$searchBox.Location = New-Object Drawing.Point(370,78)
+$searchBox.Size = New-Object Drawing.Size(360,30)
+$form.Controls.Add($searchBox)
 
 $grid = New-Object Windows.Forms.DataGridView
 $grid.Location = New-Object Drawing.Point(15,120)
@@ -207,11 +206,36 @@ $script:allSelected = $false
 $script:isBulkSelecting = $false
 
 function Refresh-Grid {
-    $script:deviceRows = @(Get-UsbDevices)
-    $grid.Rows.Clear()
+    $script:deviceRows = @(Get-UsbDevices | Sort-Object -Property Name)
+    Show-GridRows
+}
 
-    foreach ($device in $script:deviceRows) {
+function Show-GridRows {
+    $grid.Rows.Clear()
+    $filter = $searchBox.Text
+    $rowsToRender = $script:deviceRows
+    if (-not [string]::IsNullOrWhiteSpace($filter)) {
+        $rowsToRender = @(
+            $script:deviceRows | Where-Object {
+                $_.Name -like "*$filter*" -or $_.PnpDeviceId -like "*$filter*" -or $_.Status -like "*$filter*"
+            }
+        )
+    }
+
+    foreach ($device in $rowsToRender) {
         $rowIndex = $grid.Rows.Add($device.Selected, $device.Name, $device.PnpDeviceId, $device.Status, $device.PowerSavingAllowed, $device.WakeAllowed)
+        if (-not $device.PowerSavingToggleSupported) {
+            $savingTextCell = New-Object Windows.Forms.DataGridViewTextBoxCell
+            $savingTextCell.Value = 'Feature Unavailable for this device.'
+            $savingTextCell.Style.BackColor = [Drawing.Color]::LightGray
+            $savingTextCell.Style.ForeColor = [Drawing.Color]::DimGray
+            $savingTextCell.Style.SelectionBackColor = [Drawing.Color]::LightGray
+            $savingTextCell.Style.SelectionForeColor = [Drawing.Color]::DimGray
+            $savingTextCell.Style.Alignment = [Windows.Forms.DataGridViewContentAlignment]::MiddleLeft
+            $savingTextCell.ToolTipText = 'Feature Unavailable for this device.'
+            $grid.Rows[$rowIndex].Cells['PowerSavingAllowed'] = $savingTextCell
+            $grid.Rows[$rowIndex].Cells['PowerSavingAllowed'].ReadOnly = $true
+        }
         if (-not $device.WakeToggleSupported) {
             $wakeTextCell = New-Object Windows.Forms.DataGridViewTextBoxCell
             $wakeTextCell.Value = 'Feature Unavailable for this device.'
@@ -224,9 +248,10 @@ function Refresh-Grid {
             $grid.Rows[$rowIndex].Cells['WakeAllowed'] = $wakeTextCell
             $grid.Rows[$rowIndex].Cells['WakeAllowed'].ReadOnly = $true
         }
+        $grid.Rows[$rowIndex].Tag = $device
     }
 
-    $status.Text = "Loaded $($script:deviceRows.Count) USB devices."
+    $status.Text = "Loaded $($script:deviceRows.Count) USB devices. Showing $($rowsToRender.Count)."
 }
 
 function Get-SelectedRows {
@@ -239,7 +264,8 @@ function Set-SelectedState {
 
     foreach ($row in @($grid.SelectedRows)) {
         $row.Cells['Selected'].Value = $Value
-        $script:deviceRows[$row.Index].Selected = $Value
+        $device = $row.Tag
+        if ($null -ne $device) { $device.Selected = $Value }
     }
 }
 
@@ -282,7 +308,8 @@ $grid.add_CellValueChanged({
     try {
         foreach ($row in $targetRows) {
             $row.Cells['Selected'].Value = $newValue
-            $script:deviceRows[$row.Index].Selected = $newValue
+            $device = $row.Tag
+            if ($null -ne $device) { $device.Selected = $newValue }
         }
     } finally {
         $script:isBulkSelecting = $false
@@ -314,8 +341,8 @@ $grid.add_CellMouseDown({
 
 $ctxSelect.add_Click({ Set-SelectedState -Value $true })
 $ctxUnselect.add_Click({ Set-SelectedState -Value $false })
-$ctxEnableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $true } -ActionName 'Power-saving enable (context)' })
-$ctxDisableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $false } -ActionName 'Power-saving disable (context)' })
+$ctxDisableSaving.add_Click({ Apply-Bulk -Action { param($d) if ($d.PowerSavingToggleSupported) { Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $false } } -ActionName 'Power-saving disable (context)' })
+$ctxEnableSaving.add_Click({ Apply-Bulk -Action { param($d) if ($d.PowerSavingToggleSupported) { Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $true } } -ActionName 'Power-saving enable (context)' })
 $ctxEnableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $true } } -ActionName 'Wake enable (context)' })
 $ctxDisableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $false } } -ActionName 'Wake disable (context)' })
 
@@ -413,18 +440,17 @@ Usage:
 $toggleSelect.add_Click({
     $script:allSelected = -not $script:allSelected
     for ($i = 0; $i -lt $script:deviceRows.Count; $i++) {
+        if ($i -lt $grid.Rows.Count) {
+            $grid.Rows[$i].Cells['Selected'].Value = $script:allSelected
+        }
         $script:deviceRows[$i].Selected = $script:allSelected
-        $grid.Rows[$i].Cells['Selected'].Value = $script:allSelected
     }
 
     $toggleSelect.Text = if ($script:allSelected) { 'Select None' } else { 'Select All' }
 })
 
 $refreshBtn.add_Click({ Refresh-Grid })
-$disableSavingBtn.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $false } -ActionName 'Power-saving disable' })
-$enableSavingBtn.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $true } -ActionName 'Power-saving enable' })
-$disableWakeBtn.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $false } } -ActionName 'Wake disable' })
-$enableWakeBtn.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $true } } -ActionName 'Wake enable' })
+$searchBox.add_TextChanged({ Show-GridRows })
 
 Refresh-Grid
 [void]$form.ShowDialog()
