@@ -159,12 +159,8 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = "$script:AppTitle by $script:Author"
 $form.Size = New-Object System.Drawing.Size(1180, 760)
 $form.StartPosition = 'CenterScreen'
-$form.BackColor = [System.Drawing.Color]::FromArgb(30,30,30)
-$form.ForeColor = [System.Drawing.Color]::LightBlue
 
 $menu = New-Object System.Windows.Forms.MenuStrip
-$menu.BackColor = [System.Drawing.Color]::FromArgb(40,40,40)
-$menu.ForeColor = [System.Drawing.Color]::LightBlue
 
 $fileMenu = New-Object System.Windows.Forms.ToolStripMenuItem('File')
 $exitMenu = New-Object System.Windows.Forms.ToolStripMenuItem('Exit')
@@ -178,26 +174,26 @@ $helpMenu = New-Object System.Windows.Forms.ToolStripMenuItem('Help')
 $aboutItem = New-Object System.Windows.Forms.ToolStripMenuItem('About')
 $manualItem = New-Object System.Windows.Forms.ToolStripMenuItem('Manual')
 $aboutItem.add_Click({
-    [System.Windows.Forms.MessageBox]::Show(
-@" 
-$script:AppTitle v$script:AppVersion
-Author: $script:Author
+    $about = New-Object System.Windows.Forms.Form
+    $about.Text = 'About PowerShell Sync-Thing'
+    $about.Size = '520,300'
+    $about.StartPosition = 'CenterParent'
 
-Purpose:
-Modern multi-threaded, 2-way folder synchronization manager.
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = '20,20'; $lbl.Size = '470,170'
+    $lbl.Text = "$script:AppTitle v$script:AppVersion`r`nAuthor: $script:Author`r`n`r`nPurpose:`r`nEnterprise-friendly multi-threaded, 2-way folder synchronization manager.`r`n`r`nKey Uses:`r`n- Manage many sync pairs`r`n- Start/Stop sync workers`r`n- Verbose status + persistent logging"
 
-Key uses:
-- Create/manage many 2-way sync pairs
-- Start/Stop all sync workers
-- Verbose status and file-level logging
-- Persisted settings and logging controls
+    $lnk = New-Object System.Windows.Forms.LinkLabel
+    $lnk.Location = '20,200'; $lnk.Size = '470,24'
+    $lnk.Text = $script:GitHubUrl
+    $lnk.add_Click({ Start-Process $script:GitHubUrl })
 
-GitHub:
-$script:GitHubUrl
-"@,
-        'About PowerShell SyncThing',
-        [System.Windows.Forms.MessageBoxButtons]::OK,
-        [System.Windows.Forms.MessageBoxIcon]::Information)
+    $btnOk = New-Object System.Windows.Forms.Button
+    $btnOk.Location = '400,225'; $btnOk.Size = '90,28'; $btnOk.Text = 'Close'
+    $btnOk.add_Click({ $about.Close() })
+
+    $about.Controls.AddRange(@($lbl,$lnk,$btnOk))
+    $about.ShowDialog() | Out-Null
 })
 $manualItem.add_Click({
     [System.Windows.Forms.MessageBox]::Show(
@@ -233,29 +229,30 @@ $form.Controls.Add($menu)
 $form.MainMenuStrip = $menu
 
 # Controls
+$appTitleLabel = New-Object System.Windows.Forms.Label
+$appTitleLabel.Location = '20,36'; $appTitleLabel.Size = '360,24'
+$appTitleLabel.Font = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawing.FontStyle]::Bold)
+$appTitleLabel.Text = 'PowerShell Sync-Thing'
+
 $lblThread = New-Object System.Windows.Forms.Label
-$lblThread.Location = '20,40'; $lblThread.Size = '560,24'
+$lblThread.Location = '20,64'; $lblThread.Size = '560,24'
 $lblThread.Text = "Detected CPU cores: $cpu | Recommended threads: $([Math]::Max(2,[Math]::Min($cpu,16)))"
 
 $numThread = New-Object System.Windows.Forms.NumericUpDown
-$numThread.Location = '600,38'; $numThread.Size = '80,26'; $numThread.Minimum = 1; $numThread.Maximum = [Math]::Max(128,$cpu*4)
+$numThread.Location = '600,62'; $numThread.Size = '80,26'; $numThread.Minimum = 1; $numThread.Maximum = [Math]::Max(128,$cpu*4)
 $numThread.Value = [decimal]$settings.App.ThreadCount
 
-$githubLink = New-Object System.Windows.Forms.LinkLabel
-$githubLink.Location = '700,40'; $githubLink.Size = '440,24'; $githubLink.Text = $script:GitHubUrl
-$githubLink.LinkColor = [System.Drawing.Color]::DeepSkyBlue
-$githubLink.add_Click({ Start-Process $script:GitHubUrl })
-
 $pairGrid = New-Object System.Windows.Forms.DataGridView
-$pairGrid.Location = '20,80'; $pairGrid.Size = '1120,270'
-$pairGrid.BackgroundColor = [System.Drawing.Color]::FromArgb(25,25,25)
-$pairGrid.ForeColor = [System.Drawing.Color]::White
+$pairGrid.Location = '20,98'; $pairGrid.Size = '1120,270'
 $pairGrid.ColumnCount = 3
 $pairGrid.Columns[0].Name = 'Name'; $pairGrid.Columns[1].Name = 'PathA'; $pairGrid.Columns[2].Name = 'PathB'
 
-$txtName = New-Object System.Windows.Forms.TextBox; $txtName.Location = '20,370'; $txtName.Size = '180,24'; $txtName.PlaceholderText = 'Pair Name'
-$txtA = New-Object System.Windows.Forms.TextBox; $txtA.Location = '210,370'; $txtA.Size = '380,24'; $txtA.PlaceholderText = 'Location A'
-$txtB = New-Object System.Windows.Forms.TextBox; $txtB.Location = '600,370'; $txtB.Size = '380,24'; $txtB.PlaceholderText = 'Location B'
+$lblName = New-Object System.Windows.Forms.Label; $lblName.Location='20,350'; $lblName.Size='180,18'; $lblName.Text='Pair Name'
+$txtName = New-Object System.Windows.Forms.TextBox; $txtName.Location = '20,370'; $txtName.Size = '180,24'
+$lblA = New-Object System.Windows.Forms.Label; $lblA.Location='210,350'; $lblA.Size='380,18'; $lblA.Text='Location A'
+$txtA = New-Object System.Windows.Forms.TextBox; $txtA.Location = '210,370'; $txtA.Size = '380,24'
+$lblB = New-Object System.Windows.Forms.Label; $lblB.Location='600,350'; $lblB.Size='380,18'; $lblB.Text='Location B'
+$txtB = New-Object System.Windows.Forms.TextBox; $txtB.Location = '600,370'; $txtB.Size = '380,24'
 $btnBrowseA = New-Object System.Windows.Forms.Button; $btnBrowseA.Location='990,368'; $btnBrowseA.Size='70,28'; $btnBrowseA.Text='A...'
 $btnBrowseB = New-Object System.Windows.Forms.Button; $btnBrowseB.Location='1070,368'; $btnBrowseB.Size='70,28'; $btnBrowseB.Text='B...'
 $btnAddPair = New-Object System.Windows.Forms.Button; $btnAddPair.Location='20,402'; $btnAddPair.Size='150,30'; $btnAddPair.Text='Add/Update Pair'
@@ -264,7 +261,7 @@ $btnStart = New-Object System.Windows.Forms.Button; $btnStart.Location='340,402'
 $btnStop = New-Object System.Windows.Forms.Button; $btnStop.Location='520,402'; $btnStop.Size='170,30'; $btnStop.Text='Stop Sync Server'
 
 $statusBox = New-Object System.Windows.Forms.TextBox
-$statusBox.Location='20,450'; $statusBox.Size='1120,250'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'; $statusBox.BackColor=[System.Drawing.Color]::FromArgb(20,20,20); $statusBox.ForeColor=[System.Drawing.Color]::LightBlue
+$statusBox.Location='20,450'; $statusBox.Size='1120,250'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
 
 $folderDialog = New-Object System.Windows.Forms.FolderBrowserDialog
 
@@ -306,7 +303,7 @@ $btnStop.add_Click({ Stop-AllSync -settings $settings -statusBox $statusBox; Wri
 
 $settingsItem.add_Click({
     $dlg = New-Object System.Windows.Forms.Form
-    $dlg.Text = 'Application Options'; $dlg.Size = '520,380'; $dlg.BackColor = [System.Drawing.Color]::FromArgb(35,35,35); $dlg.ForeColor=[System.Drawing.Color]::LightBlue
+    $dlg.Text = 'Application Options'; $dlg.Size = '520,380'
 
     $txtLogName = New-Object System.Windows.Forms.TextBox; $txtLogName.Location='20,30'; $txtLogName.Size='460,24'; $txtLogName.Text=$settings.Logging.FileName
     $txtLogDir = New-Object System.Windows.Forms.TextBox; $txtLogDir.Location='20,80'; $txtLogDir.Size='460,24'; $txtLogDir.Text=$settings.Logging.LogDirectory
@@ -338,7 +335,7 @@ foreach ($p in $settings.SyncPairs) {
     $pairGrid.Rows.Add($p.Name,$p.PathA,$p.PathB) | Out-Null
 }
 
-$form.Controls.AddRange(@($lblThread,$numThread,$githubLink,$pairGrid,$txtName,$txtA,$txtB,$btnBrowseA,$btnBrowseB,$btnAddPair,$btnRemovePair,$btnStart,$btnStop,$statusBox))
+$form.Controls.AddRange(@($appTitleLabel,$lblThread,$numThread,$pairGrid,$lblName,$txtName,$lblA,$txtA,$lblB,$txtB,$btnBrowseA,$btnBrowseB,$btnAddPair,$btnRemovePair,$btnStart,$btnStop,$statusBox))
 $form.add_FormClosing({ Stop-AllSync -settings $settings -statusBox $statusBox; $settings.App.ThreadCount=[int]$numThread.Value; Save-Settings $settings })
 
 [void]$form.ShowDialog()
