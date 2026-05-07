@@ -178,6 +178,9 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
     $col.HeaderText = $colName
     $col.DataPropertyName = $colName
     $col.ReadOnly = ($colName -ne 'Selected')
+    if ($colName -eq 'WakeAllowed' -and $col -is [Windows.Forms.DataGridViewCheckBoxColumn]) {
+        $col.ThreeState = $false
+    }
     $grid.Columns.Add($col) | Out-Null
 }
 
@@ -210,13 +213,16 @@ function Refresh-Grid {
     foreach ($device in $script:deviceRows) {
         $rowIndex = $grid.Rows.Add($device.Selected, $device.Name, $device.PnpDeviceId, $device.Status, $device.PowerSavingAllowed, $device.WakeAllowed)
         if (-not $device.WakeToggleSupported) {
-            $wakeCell = $grid.Rows[$rowIndex].Cells['WakeAllowed']
-            $wakeCell.ReadOnly = $true
-            $wakeCell.Style.BackColor = [Drawing.Color]::LightGray
-            $wakeCell.Style.NullValue = 'Feature Unavailable for this device.'
-            $wakeCell.Style.Alignment = [Windows.Forms.DataGridViewContentAlignment]::MiddleLeft
-            $wakeCell.ToolTipText = 'Feature Unavailable for this device.'
-            $wakeCell.Value = $null
+            $wakeTextCell = New-Object Windows.Forms.DataGridViewTextBoxCell
+            $wakeTextCell.Value = 'Feature Unavailable for this device.'
+            $wakeTextCell.Style.BackColor = [Drawing.Color]::LightGray
+            $wakeTextCell.Style.ForeColor = [Drawing.Color]::DimGray
+            $wakeTextCell.Style.SelectionBackColor = [Drawing.Color]::LightGray
+            $wakeTextCell.Style.SelectionForeColor = [Drawing.Color]::DimGray
+            $wakeTextCell.Style.Alignment = [Windows.Forms.DataGridViewContentAlignment]::MiddleLeft
+            $wakeTextCell.ToolTipText = 'Feature Unavailable for this device.'
+            $wakeTextCell.ReadOnly = $true
+            $grid.Rows[$rowIndex].Cells['WakeAllowed'] = $wakeTextCell
         }
     }
 
@@ -287,6 +293,12 @@ $grid.add_CurrentCellDirtyStateChanged({
     if ($grid.IsCurrentCellDirty) {
         $grid.CommitEdit([Windows.Forms.DataGridViewDataErrorContexts]::Commit)
     }
+})
+
+$grid.add_DataError({
+    param($sender, $e)
+    $e.ThrowException = $false
+    $e.Cancel = $false
 })
 
 
