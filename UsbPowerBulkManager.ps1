@@ -1,8 +1,17 @@
+<#
+.SYNOPSIS
+USB Power Bulk Manager (v1.1.1)
+
+.DESCRIPTION
+WinForms utility for bulk USB power-management administration with capability-aware controls,
+search filtering, multi-select workflows, context-menu actions, and an About dialog.
+#>
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $AppName = 'USB Power Bulk Manager'
-$AppVersion = '1.1.0'
+$AppVersion = '1.1.1'
 $AppAuthor = 'Joshua Dwight'
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -25,7 +34,9 @@ public static class UsbPowerBulkGuiFactory
     }
 }
 "@
-Add-Type -TypeDefinition $cs -ReferencedAssemblies @('System.Windows.Forms', 'System.Drawing')
+if (-not ('UsbPowerBulkGuiFactory' -as [type])) {
+    Add-Type -TypeDefinition $cs -ReferencedAssemblies @('System.Windows.Forms', 'System.Drawing')
+}
 
 function Test-IsAdministrator {
     $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
