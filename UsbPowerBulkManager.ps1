@@ -19,7 +19,7 @@ public static class UsbPowerBulkGuiFactory
     {
         var form = new Form();
         form.Text = title;
-        form.Size = new Size(1300, 820);
+        form.Size = new Size(1300, 900);
         form.StartPosition = FormStartPosition.CenterScreen;
         return form;
     }
@@ -57,7 +57,6 @@ function Get-UsbDevices {
         $wakeSupported = $wakeProgrammableDevices.Contains($d.Name)
         $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
         $powerSupported = $powerSavingState.Supported
-        if (-not ($wakeSupported -or $powerSupported)) { continue }
         [pscustomobject]@{
             Selected = $false
             Name = $d.Name
@@ -75,7 +74,21 @@ function Get-PowerSavingState {
     param([string]$PnpDeviceId)
     try {
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$PnpDeviceId\Device Parameters"
-        $value = (Get-ItemProperty -Path $regPath -Name PnPCapabilities -ErrorAction Stop).PnPCapabilities
+        if (-not (Test-Path $regPath)) {
+            return @{
+                Supported = $false
+                Allowed = $false
+            }
+        }
+
+        $value = (Get-ItemProperty -Path $regPath -Name PnPCapabilities -ErrorAction SilentlyContinue).PnPCapabilities
+        if ($null -eq $value) {
+            return @{
+                Supported = $true
+                Allowed = $true
+            }
+        }
+
         return @{
             Supported = $true
             Allowed = (-not (($value -band 0x20) -eq 0x20))
@@ -151,7 +164,7 @@ $form.Controls.Add($searchBox)
 
 $grid = New-Object Windows.Forms.DataGridView
 $grid.Location = New-Object Drawing.Point(15,120)
-$grid.Size = New-Object Drawing.Size(1240,640)
+$grid.Size = New-Object Drawing.Size(1240,700)
 $grid.AutoGenerateColumns = $false
 $grid.AllowUserToAddRows = $false
 $grid.AllowUserToDeleteRows = $false
@@ -186,7 +199,7 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,770)
+$status.Location = New-Object Drawing.Point(15,835)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
