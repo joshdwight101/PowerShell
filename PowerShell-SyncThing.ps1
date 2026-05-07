@@ -242,60 +242,71 @@ $numThread = New-Object System.Windows.Forms.NumericUpDown
 $numThread.Location = '600,62'; $numThread.Size = '80,26'; $numThread.Minimum = 1; $numThread.Maximum = [Math]::Max(128,$cpu*4)
 $numThread.Value = [decimal]$settings.App.ThreadCount
 
-$pairGrid = New-Object System.Windows.Forms.DataGridView
-$pairGrid.Location = '20,98'; $pairGrid.Size = '1120,270'
-$pairGrid.ColumnCount = 3
-$pairGrid.Columns[0].Name = 'Name'; $pairGrid.Columns[1].Name = 'PathA'; $pairGrid.Columns[2].Name = 'PathB'
+$pairGridLabel = New-Object System.Windows.Forms.Label
+$pairGridLabel.Location = '20,95'; $pairGridLabel.Size = '450,22'
+$pairGridLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
+$pairGridLabel.Text = 'Sync Pair Configuration (edit directly in grid)'
 
-$lblName = New-Object System.Windows.Forms.Label; $lblName.Location='20,350'; $lblName.Size='180,18'; $lblName.Text='Pair Name'
-$txtName = New-Object System.Windows.Forms.TextBox; $txtName.Location = '20,370'; $txtName.Size = '180,24'
-$lblA = New-Object System.Windows.Forms.Label; $lblA.Location='210,350'; $lblA.Size='380,18'; $lblA.Text='Location A'
-$txtA = New-Object System.Windows.Forms.TextBox; $txtA.Location = '210,370'; $txtA.Size = '380,24'
-$lblB = New-Object System.Windows.Forms.Label; $lblB.Location='600,350'; $lblB.Size='380,18'; $lblB.Text='Location B'
-$txtB = New-Object System.Windows.Forms.TextBox; $txtB.Location = '600,370'; $txtB.Size = '380,24'
-$btnBrowseA = New-Object System.Windows.Forms.Button; $btnBrowseA.Location='990,368'; $btnBrowseA.Size='70,28'; $btnBrowseA.Text='A...'
-$btnBrowseB = New-Object System.Windows.Forms.Button; $btnBrowseB.Location='1070,368'; $btnBrowseB.Size='70,28'; $btnBrowseB.Text='B...'
-$btnAddPair = New-Object System.Windows.Forms.Button; $btnAddPair.Location='20,402'; $btnAddPair.Size='150,30'; $btnAddPair.Text='Add/Update Pair'
-$btnRemovePair = New-Object System.Windows.Forms.Button; $btnRemovePair.Location='180,402'; $btnRemovePair.Size='140,30'; $btnRemovePair.Text='Remove Selected'
-$btnStart = New-Object System.Windows.Forms.Button; $btnStart.Location='340,402'; $btnStart.Size='170,30'; $btnStart.Text='Start Sync Server'
-$btnStop = New-Object System.Windows.Forms.Button; $btnStop.Location='520,402'; $btnStop.Size='170,30'; $btnStop.Text='Stop Sync Server'
+$pairGrid = New-Object System.Windows.Forms.DataGridView
+$pairGrid.Location = '20,120'; $pairGrid.Size = '1120,320'
+$pairGrid.AllowUserToAddRows = $false
+$pairGrid.AllowUserToDeleteRows = $false
+$pairGrid.RowHeadersVisible = $false
+$pairGrid.AutoSizeRowsMode = 'None'
+$pairGrid.SelectionMode = 'CellSelect'
+
+$colName = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+$colName.Name = 'Name'; $colName.HeaderText = 'Sync Pair Name'; $colName.Width = 170
+$colPathA = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+$colPathA.Name = 'PathA'; $colPathA.HeaderText = 'Directory Path A'; $colPathA.Width = 340
+$colBrowseA = New-Object System.Windows.Forms.DataGridViewButtonColumn
+$colBrowseA.Name = 'BrowseA'; $colBrowseA.HeaderText = 'Browse A'; $colBrowseA.Width = 90; $colBrowseA.Text = 'Browse...'; $colBrowseA.UseColumnTextForButtonValue = $true
+$colPathB = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
+$colPathB.Name = 'PathB'; $colPathB.HeaderText = 'Directory Path B'; $colPathB.Width = 340
+$colBrowseB = New-Object System.Windows.Forms.DataGridViewButtonColumn
+$colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.Width = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
+$colDelete = New-Object System.Windows.Forms.DataGridViewButtonColumn
+$colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.Width = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
+$pairGrid.Columns.AddRange(@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colDelete))
+
+$btnAddRow = New-Object System.Windows.Forms.Button; $btnAddRow.Location='20,450'; $btnAddRow.Size='60,32'; $btnAddRow.Text='+'
+$btnStart = New-Object System.Windows.Forms.Button; $btnStart.Location='100,450'; $btnStart.Size='170,32'; $btnStart.Text='Start Sync Server'
+$btnStop = New-Object System.Windows.Forms.Button; $btnStop.Location='280,450'; $btnStop.Size='170,32'; $btnStop.Text='Stop Sync Server'
 
 $statusBox = New-Object System.Windows.Forms.TextBox
-$statusBox.Location='20,450'; $statusBox.Size='1120,250'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
+$statusBox.Location='20,495'; $statusBox.Size='1120,205'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
 
 $folderDialog = New-Object System.Windows.Forms.FolderBrowserDialog
 
-$btnBrowseA.add_Click({ if ($folderDialog.ShowDialog() -eq 'OK') { $txtA.Text = $folderDialog.SelectedPath } })
-$btnBrowseB.add_Click({ if ($folderDialog.ShowDialog() -eq 'OK') { $txtB.Text = $folderDialog.SelectedPath } })
-
-$btnAddPair.add_Click({
-    if ([string]::IsNullOrWhiteSpace($txtName.Text) -or [string]::IsNullOrWhiteSpace($txtA.Text) -or [string]::IsNullOrWhiteSpace($txtB.Text)) { return }
-    $pair = [ordered]@{ Name=$txtName.Text.Trim(); PathA=$txtA.Text.Trim(); PathB=$txtB.Text.Trim() }
-    $existing = $script:syncPairs | Where-Object Name -eq $pair.Name
-    if ($existing) {
-        $existing.PathA = $pair.PathA; $existing.PathB = $pair.PathB
-    } else {
-        $script:syncPairs.Add($pair)
-        $pairGrid.Rows.Add($pair.Name,$pair.PathA,$pair.PathB) | Out-Null
-    }
-    $settings.SyncPairs = @($script:syncPairs)
-    $settings.App.ThreadCount = [int]$numThread.Value
-    Save-Settings $settings
-    Write-VerboseLog -Message "Sync pair saved: $($pair.Name)" -StatusTextBox $statusBox -Settings $settings
+$btnAddRow.add_Click({
+    $pairGrid.Rows.Add('','','','','','') | Out-Null
 })
 
-$btnRemovePair.add_Click({
-    if ($pairGrid.SelectedRows.Count -lt 1) { return }
-    $name = $pairGrid.SelectedRows[0].Cells[0].Value
-    $pairGrid.Rows.RemoveAt($pairGrid.SelectedRows[0].Index)
-    $script:syncPairs = New-Object 'System.Collections.Generic.List[object]' ($script:syncPairs | Where-Object Name -ne $name)
-    $settings.SyncPairs = @($script:syncPairs)
-    Save-Settings $settings
-    Write-VerboseLog -Message "Removed sync pair: $name" -StatusTextBox $statusBox -Settings $settings
+$pairGrid.add_CellContentClick({
+    param($sender,$e)
+    if ($e.RowIndex -lt 0) { return }
+    $columnName = $pairGrid.Columns[$e.ColumnIndex].Name
+    if ($columnName -eq 'BrowseA') {
+        if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathA'].Value = $folderDialog.SelectedPath }
+    } elseif ($columnName -eq 'BrowseB') {
+        if ($folderDialog.ShowDialog() -eq 'OK') { $pairGrid.Rows[$e.RowIndex].Cells['PathB'].Value = $folderDialog.SelectedPath }
+    } elseif ($columnName -eq 'Delete') {
+        $pairGrid.Rows.RemoveAt($e.RowIndex)
+    }
 })
 
 $btnStart.add_Click({
     $settings.App.ThreadCount = [int]$numThread.Value
+    $script:syncPairs.Clear()
+    foreach ($row in $pairGrid.Rows) {
+        $name = [string]$row.Cells['Name'].Value
+        $pathA = [string]$row.Cells['PathA'].Value
+        $pathB = [string]$row.Cells['PathB'].Value
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($pathA) -or [string]::IsNullOrWhiteSpace($pathB)) { continue }
+        $script:syncPairs.Add([ordered]@{ Name = $name.Trim(); PathA = $pathA.Trim(); PathB = $pathB.Trim() })
+    }
+    $settings.SyncPairs = @($script:syncPairs)
+    Save-Settings $settings
     foreach ($pair in $script:syncPairs) { Start-SyncPair -pair $pair -settings $settings -statusBox $statusBox }
     Write-VerboseLog -Message 'Sync server started.' -StatusTextBox $statusBox -Settings $settings
 })
@@ -332,10 +343,10 @@ $settingsItem.add_Click({
 # Load saved pairs
 foreach ($p in $settings.SyncPairs) {
     $script:syncPairs.Add([ordered]@{ Name=$p.Name; PathA=$p.PathA; PathB=$p.PathB })
-    $pairGrid.Rows.Add($p.Name,$p.PathA,$p.PathB) | Out-Null
+    $pairGrid.Rows.Add($p.Name,$p.PathA,'Browse...',$p.PathB,'Browse...','Delete') | Out-Null
 }
 
-$form.Controls.AddRange(@($appTitleLabel,$lblThread,$numThread,$pairGrid,$lblName,$txtName,$lblA,$txtA,$lblB,$txtB,$btnBrowseA,$btnBrowseB,$btnAddPair,$btnRemovePair,$btnStart,$btnStop,$statusBox))
+$form.Controls.AddRange(@($appTitleLabel,$lblThread,$numThread,$pairGridLabel,$pairGrid,$btnAddRow,$btnStart,$btnStop,$statusBox))
 $form.add_FormClosing({ Stop-AllSync -settings $settings -statusBox $statusBox; $settings.App.ThreadCount=[int]$numThread.Value; Save-Settings $settings })
 
 [void]$form.ShowDialog()
