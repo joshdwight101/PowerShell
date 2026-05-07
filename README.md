@@ -218,16 +218,94 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\LetsEncrypt-CertPowerT
 ```
 
 
-### USB power-management bulk utility
+## USB Power Bulk Manager Manual (v1.1.1)
+
+`UsbPowerBulkManager.ps1` is a GUI-first administrative tool focused on bulk USB device power policy management.  
+It is designed to simplify high-volume remediation work where toggling settings one device at a time in Device Manager is too slow.
+
+### Launch
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\UsbPowerBulkManager.ps1
 ```
 
-Use this tool to quickly select USB devices and bulk-enable/disable:
-- **Allow the computer to turn off this device to save power**
-- **Allow this device to wake the computer**
+### Supported Management Scenarios
+The tool manages the following per-device behaviors:
+- **Power Saving Allowed**  
+  (“Allow the computer to turn off this device to save power” semantics)
+- **Wake Allowed**  
+  (“Allow this device to wake the computer” semantics)
 
-Includes a **Select All / Select None** toggle and per-device checkbox workflow from a single GUI.
+### Core Features
+
+#### 1) Capability-Aware Rendering
+- The app evaluates each device for:
+  - `PowerSavingToggleSupported`
+  - `WakeToggleSupported`
+- If a setting is not supported for a device, the corresponding cell is rendered as:
+  - read-only
+  - grayed out
+  - labeled **Feature Unavailable for this device.**
+
+#### 2) Device Discovery and Data Sources
+- Enumerates USB devices via `Get-CimInstance Win32_PnPEntity`.
+- Uses `powercfg /devicequery` (`wake_armed`, `wake_programmable`) to infer wake capabilities/state.
+- Uses device registry path under:
+  - `HKLM:\SYSTEM\CurrentControlSet\Enum\<PNPDeviceID>\Device Parameters`
+  to evaluate power-saving behavior and toggle support.
+
+#### 3) Bulk Selection Workflow
+- Dedicated **Selected** checkbox column for operation targeting.
+- Explorer-style multi-row selection support in the grid.
+- **Select All / Select None** quick toggle button.
+- Context-menu helpers for **Check Selected** and **Uncheck Selected**.
+
+#### 4) Context-Menu Driven Actions
+Right-click on the grid to use bulk actions:
+- Enable Power Saving
+- Disable Power Saving
+- Enable Wake on USB
+- Disable Wake on USB
+
+These actions execute only against checked rows and enforce capability guards so unsupported operations are skipped.
+
+#### 5) Real-Time Search Filter
+- Built-in search box filters rows immediately while typing.
+- Matches against:
+  - Device Name
+  - PnP Device ID
+  - Status
+
+#### 6) Sorting and Refresh
+- Refresh repopulates devices and sorts by **Name (ascending)** by default.
+- Status bar shows loaded and currently displayed row counts.
+
+#### 7) Menu Bar and About Dialog
+- **File → Exit** closes the application.
+- **Help → About** shows:
+  - App title
+  - Version
+  - Summary, purpose, and usage notes
+  - Author attribution and clickable GitHub links
+
+### Typical Usage Procedure
+1. Launch as Administrator (recommended for actual setting changes).
+2. Click **Refresh**.
+3. Use **Search** to narrow target devices if needed.
+4. Select rows (single / Ctrl / Shift multi-select).
+5. Check devices in the **Selected** column.
+6. Right-click and choose desired action(s).
+7. Refresh to confirm final states.
+
+### Permissions and Execution Notes
+- Read-only viewing works without elevation, but applying changes requires Administrator rights.
+- If not elevated, the app prompts before bulk changes.
+- GUI execution requires an interactive Windows desktop session.
+
+### Troubleshooting
+- If rows appear but toggles are unavailable, verify hardware/driver support for those features.
+- If wake capability appears inconsistent, validate `powercfg /devicequery wake_programmable` output directly.
+- If no devices appear, confirm USB devices exist and `Get-CimInstance Win32_PnPEntity` returns expected USB entries.
+- Running the script repeatedly in the same PowerShell session is supported; type-loading guards prevent duplicate type-definition crashes.
 
 ### Super admin helper
 ```powershell
