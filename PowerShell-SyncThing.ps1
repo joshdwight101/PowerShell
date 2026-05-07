@@ -24,6 +24,7 @@ function Initialize-Settings {
     $defaults = [ordered]@{
         App = [ordered]@{
             ThreadCount = $recommended
+            MaxCoresLimit = 0
             DarkTheme = $true
             PollingMs = 1200
             AutoSaveSettings = $true
@@ -139,11 +140,15 @@ function Start-SyncPair {
         }
     }).AddArgument($pair).AddArgument($settings)
 
-    $ps.RunspacePool = [runspacefactory]::CreateRunspacePool(1, $settings.App.ThreadCount)
+    $coreCount = [Environment]::ProcessorCount
+    $limit = [int]$settings.App.MaxCoresLimit
+    $effectiveThreads = if ($limit -gt 0) { [Math]::Min($coreCount, $limit) } else { $coreCount }
+    $effectiveThreads = [Math]::Max(1, $effectiveThreads)
+    $ps.RunspacePool = [runspacefactory]::CreateRunspacePool(1, $effectiveThreads)
     $ps.RunspacePool.Open()
     $asyncResult = $ps.BeginInvoke()
     $script:workers[$pair.Name] = [ordered]@{ PowerShell = $ps; Handle = $asyncResult }
-    Write-VerboseLog -Message "Started sync pair '$($pair.Name)' with thread cap $($settings.App.ThreadCount)." -StatusTextBox $statusBox -Settings $settings
+    Write-VerboseLog -Message "Started sync pair '$($pair.Name)' with thread cap $effectiveThreads (cores: $coreCount, limit: $limit)." -StatusTextBox $statusBox -Settings $settings
 }
 
 function Stop-AllSync([hashtable]$settings, [System.Windows.Forms.TextBox]$statusBox) {
@@ -165,6 +170,7 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = "$script:AppTitle by $script:Author"
 $form.Size = New-Object System.Drawing.Size(1180, 760)
 $form.StartPosition = 'CenterScreen'
+$form.WindowState = 'Maximized'
 
 $menu = New-Object System.Windows.Forms.MenuStrip
 
@@ -187,7 +193,7 @@ $aboutItem.add_Click({
 
     $lbl = New-Object System.Windows.Forms.Label
     $lbl.Location = '20,20'; $lbl.Size = '470,170'
-    $lbl.Text = "$script:AppTitle v$script:AppVersion`r`nAuthor: $script:Author`r`n`r`nPurpose:`r`nEnterprise-friendly sync manager with 1-way/2-way modes and UNC-aware path entry.`r`n`r`nKey Uses:`r`n- Manage many sync pairs in-grid`r`n- Per-pair sync mode toggle (B→A, A→B, 2-way)`r`n- Start/Stop sync workers`r`n- Verbose status + persistent logging"
+    $lbl.Text = "$script:AppTitle v$script:AppVersion`r`nAuthor: $script:Author`r`n`r`nPurpose:`r`nEnterprise-friendly sync manager with 1-way/2-way modes and UNC-aware path entry.`r`n`r`nKey Uses:`r`n- Manage many sync pairs in-grid`r`n- Per-pair sync mode toggle (B->A, A->B, 2-way)`r`n- Start/Stop sync workers`r`n- Verbose status + persistent logging"
 
     $lnk = New-Object System.Windows.Forms.LinkLabel
     $lnk.Location = '20,200'; $lnk.Size = '470,24'
@@ -240,44 +246,38 @@ $appTitleLabel.Location = '20,36'; $appTitleLabel.Size = '360,24'
 $appTitleLabel.Font = New-Object System.Drawing.Font('Segoe UI',12,[System.Drawing.FontStyle]::Bold)
 $appTitleLabel.Text = 'PowerShell Sync-Thing'
 
-$lblThread = New-Object System.Windows.Forms.Label
-$lblThread.Location = '600,90'; $lblThread.Size = '520,24'
-$lblThread.Text = "Detected CPU cores: $cpu | Recommended threads: $([Math]::Max(2,[Math]::Min($cpu,16)))"
-
-$numThread = New-Object System.Windows.Forms.NumericUpDown
-$numThread.Location = '600,62'; $numThread.Size = '80,26'; $numThread.Minimum = 1; $numThread.Maximum = [Math]::Max(128,$cpu*4)
-$numThread.Value = [decimal]$settings.App.ThreadCount
-
 $pairGridLabel = New-Object System.Windows.Forms.Label
-$pairGridLabel.Location = '20,95'; $pairGridLabel.Size = '450,22'
+$pairGridLabel.Location = '20,64'; $pairGridLabel.Size = '650,22'
 $pairGridLabel.Font = New-Object System.Drawing.Font('Segoe UI',9,[System.Drawing.FontStyle]::Bold)
-$pairGridLabel.Text = 'Sync Pair Configuration (edit directly in grid)'
+$pairGridLabel.Text = 'Sync Pair Configuration (edit directly in grid) - dynamic cores auto-detected'
 
 $pairGrid = New-Object System.Windows.Forms.DataGridView
-$pairGrid.Location = '20,120'; $pairGrid.Size = '1120,320'
+$pairGrid.Location = '20,90'; $pairGrid.Size = '1120,350'
 $pairGrid.AllowUserToAddRows = $false
 $pairGrid.AllowUserToDeleteRows = $false
 $pairGrid.RowHeadersVisible = $false
 $pairGrid.AutoSizeRowsMode = 'None'
 $pairGrid.SelectionMode = 'CellSelect'
+$pairGrid.Anchor = 'Top,Bottom,Left,Right'
+$pairGrid.AutoSizeColumnsMode = [System.Windows.Forms.DataGridViewAutoSizeColumnsMode]::Fill
 
 $colName = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-$colName.Name = 'Name'; $colName.HeaderText = 'Sync Pair Name'; $colName.Width = 170
+$colName.Name = 'Name'; $colName.HeaderText = 'Sync Pair Name'; $colName.MinimumWidth = 160
 $colPathA = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-$colPathA.Name = 'PathA'; $colPathA.HeaderText = 'Directory Path A'; $colPathA.Width = 340
+$colPathA.Name = 'PathA'; $colPathA.HeaderText = 'Directory Path A'; $colPathA.MinimumWidth = 260
 $colBrowseA = New-Object System.Windows.Forms.DataGridViewButtonColumn
-$colBrowseA.Name = 'BrowseA'; $colBrowseA.HeaderText = 'Browse A'; $colBrowseA.Width = 90; $colBrowseA.Text = 'Browse...'; $colBrowseA.UseColumnTextForButtonValue = $true
+$colBrowseA.Name = 'BrowseA'; $colBrowseA.HeaderText = 'Browse A'; $colBrowseA.MinimumWidth = 90; $colBrowseA.Text = 'Browse...'; $colBrowseA.UseColumnTextForButtonValue = $true
 $colBrowseA.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colPathB = New-Object System.Windows.Forms.DataGridViewTextBoxColumn
-$colPathB.Name = 'PathB'; $colPathB.HeaderText = 'Directory Path B'; $colPathB.Width = 340
+$colPathB.Name = 'PathB'; $colPathB.HeaderText = 'Directory Path B'; $colPathB.MinimumWidth = 260
 $colBrowseB = New-Object System.Windows.Forms.DataGridViewButtonColumn
-$colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.Width = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
+$colBrowseB.Name = 'BrowseB'; $colBrowseB.HeaderText = 'Browse B'; $colBrowseB.MinimumWidth = 90; $colBrowseB.Text = 'Browse...'; $colBrowseB.UseColumnTextForButtonValue = $true
 $colBrowseB.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colMode = New-Object System.Windows.Forms.DataGridViewButtonColumn
-$colMode.Name = 'Mode'; $colMode.HeaderText = 'Sync Mode'; $colMode.Width = 120; $colMode.Text = '<--2-way-->'; $colMode.UseColumnTextForButtonValue = $false
+$colMode.Name = 'Mode'; $colMode.HeaderText = 'Sync Mode'; $colMode.MinimumWidth = 110; $colMode.Text = '<--2-way-->'; $colMode.UseColumnTextForButtonValue = $false
 $colMode.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $colDelete = New-Object System.Windows.Forms.DataGridViewButtonColumn
-$colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.Width = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
+$colDelete.Name = 'Delete'; $colDelete.HeaderText = 'Remove'; $colDelete.MinimumWidth = 80; $colDelete.Text = 'Delete'; $colDelete.UseColumnTextForButtonValue = $true
 $colDelete.FlatStyle = [System.Windows.Forms.FlatStyle]::Popup
 $gridColumns = [System.Windows.Forms.DataGridViewColumn[]]@($colName,$colPathA,$colBrowseA,$colPathB,$colBrowseB,$colMode,$colDelete)
 $pairGrid.Columns.AddRange($gridColumns)
@@ -290,9 +290,13 @@ $btnStart.BackColor = [System.Drawing.Color]::FromArgb(0,100,0)
 $btnStart.ForeColor = [System.Drawing.Color]::White
 $btnStop.BackColor = [System.Drawing.Color]::FromArgb(139,0,0)
 $btnStop.ForeColor = [System.Drawing.Color]::White
+$btnAddRow.Anchor = 'Left,Bottom'
+$btnStart.Anchor = 'Left,Bottom'
+$btnStop.Anchor = 'Left,Bottom'
 
 $statusBox = New-Object System.Windows.Forms.TextBox
 $statusBox.Location='20,495'; $statusBox.Size='1120,205'; $statusBox.Multiline=$true; $statusBox.ScrollBars='Vertical'
+$statusBox.Anchor = 'Left,Right,Bottom'
 
 $pathPicker = New-Object System.Windows.Forms.OpenFileDialog
 $pathPicker.CheckFileExists = $false
@@ -323,7 +327,6 @@ $pairGrid.add_CellContentClick({
 })
 
 $btnStart.add_Click({
-    $settings.App.ThreadCount = [int]$numThread.Value
     $script:syncPairs.Clear()
     foreach ($row in $pairGrid.Rows) {
         $name = [string]$row.Cells['Name'].Value
@@ -348,9 +351,11 @@ $settingsItem.add_Click({
     $tabs.Location='10,10'; $tabs.Size='585,360'
     $tabMain = New-Object System.Windows.Forms.TabPage('Main')
     $tabLogging = New-Object System.Windows.Forms.TabPage('Logging')
-    $mainLabel = New-Object System.Windows.Forms.Label
-    $mainLabel.Location='20,20'; $mainLabel.Size='400,30'; $mainLabel.Text='Main application options will be added here.'
-    $tabMain.Controls.Add($mainLabel)
+    $lblCoreLimit = New-Object System.Windows.Forms.Label
+    $lblCoreLimit.Location='20,20'; $lblCoreLimit.Size='360,20'; $lblCoreLimit.Text='Max cores to use (0 = auto/all available)'
+    $numCoreLimit = New-Object System.Windows.Forms.NumericUpDown
+    $numCoreLimit.Location='20,44'; $numCoreLimit.Size='140,24'; $numCoreLimit.Minimum=0; $numCoreLimit.Maximum=256; $numCoreLimit.Value=[decimal]$settings.App.MaxCoresLimit
+    $tabMain.Controls.AddRange(@($lblCoreLimit,$numCoreLimit))
 
     $lblLogName = New-Object System.Windows.Forms.Label; $lblLogName.Location='20,20'; $lblLogName.Size='160,20'; $lblLogName.Text='Log File Name'
     $txtLogName = New-Object System.Windows.Forms.TextBox; $txtLogName.Location='20,42'; $txtLogName.Size='520,24'; $txtLogName.Text=$settings.Logging.FileName
@@ -371,6 +376,7 @@ $settingsItem.add_Click({
         $settings.Logging.MaxFileMB = [int]$numMax.Value
         $settings.Logging.AutoPrune = $chkPrune.Checked
         $settings.Logging.Verbose = $chkVerbose.Checked
+        $settings.App.MaxCoresLimit = [int]$numCoreLimit.Value
         Save-Settings $settings
         Write-VerboseLog -Message 'Options saved.' -StatusTextBox $statusBox -Settings $settings
         $dlg.Close()
@@ -390,7 +396,7 @@ foreach ($p in $settings.SyncPairs) {
     $pairGrid.Rows.Add($p.Name,$p.PathA,'Browse...',$p.PathB,'Browse...',$modeLabel,'Delete') | Out-Null
 }
 
-$form.Controls.AddRange(@($appTitleLabel,$lblThread,$numThread,$pairGridLabel,$pairGrid,$btnAddRow,$btnStart,$btnStop,$statusBox))
-$form.add_FormClosing({ Stop-AllSync -settings $settings -statusBox $statusBox; $settings.App.ThreadCount=[int]$numThread.Value; Save-Settings $settings })
+$form.Controls.AddRange(@($appTitleLabel,$pairGridLabel,$pairGrid,$btnAddRow,$btnStart,$btnStop,$statusBox))
+$form.add_FormClosing({ Stop-AllSync -settings $settings -statusBox $statusBox; Save-Settings $settings })
 
 [void]$form.ShowDialog()
