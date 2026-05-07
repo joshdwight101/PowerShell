@@ -160,13 +160,13 @@ $txtSqlPass = [System.Windows.Forms.TextBox]::new(); $txtSqlPass.Location='480,8
 
 $lblRuntime = [System.Windows.Forms.Label]::new(); $lblRuntime.Text='Sage Runtime Path:'; $lblRuntime.Location='20,120'; $lblRuntime.AutoSize=$true; $form.Controls.Add($lblRuntime)
 $txtRuntime = [System.Windows.Forms.TextBox]::new(); $txtRuntime.Location='140,116'; $txtRuntime.Size='560,28'; $txtRuntime.Text=$settings.RuntimePath; $form.Controls.Add($txtRuntime)
-$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,114'; $btnBrowseRuntime.Size='120,36'; $form.Controls.Add($btnBrowseRuntime)
+$btnBrowseRuntime = [System.Windows.Forms.Button]::new(); $btnBrowseRuntime.Text='Browse...'; $btnBrowseRuntime.Location='720,118'; $btnBrowseRuntime.Size='120,36'; $form.Controls.Add($btnBrowseRuntime)
 
 $lblBackupRoot = [System.Windows.Forms.Label]::new(); $lblBackupRoot.Text='Backup Root:'; $lblBackupRoot.Location='20,155'; $lblBackupRoot.AutoSize=$true; $form.Controls.Add($lblBackupRoot)
 $txtBackupRoot = [System.Windows.Forms.TextBox]::new(); $txtBackupRoot.Location='140,151'; $txtBackupRoot.Size='560,28'; $txtBackupRoot.Text=$settings.BackupRoot; $form.Controls.Add($txtBackupRoot)
-$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,154'; $btnBrowseBackup.Size='120,36'; $form.Controls.Add($btnBrowseBackup)
+$btnBrowseBackup = [System.Windows.Forms.Button]::new(); $btnBrowseBackup.Text='Browse...'; $btnBrowseBackup.Location='720,160'; $btnBrowseBackup.Size='120,36'; $form.Controls.Add($btnBrowseBackup)
 
-$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='840,80'; $btnDetect.Size='120,36'; $form.Controls.Add($btnDetect)
+$btnDetect = [System.Windows.Forms.Button]::new(); $btnDetect.Text='Detect Databases'; $btnDetect.Location='720,76'; $btnDetect.Size='120,36'; $form.Controls.Add($btnDetect)
 $listDb = [System.Windows.Forms.CheckedListBox]::new(); $listDb.Location='20,205'; $listDb.Size='940,200'; $listDb.CheckOnClick=$true; $form.Controls.Add($listDb)
 
 $lblSageUser = [System.Windows.Forms.Label]::new(); $lblSageUser.Text='Sage Admin User:'; $lblSageUser.Location='20,425'; $lblSageUser.AutoSize=$true; $form.Controls.Add($lblSageUser)
@@ -222,26 +222,32 @@ $fileExit.Add_Click({ $form.Close() })
 $aboutMenu.Add_Click({
     $about = [System.Windows.Forms.Form]::new()
     $about.Text = "About - $AppTitle"
-    $about.Size = [System.Drawing.Size]::new(520,240)
+    $about.Size = [System.Drawing.Size]::new(540,270)
     $about.StartPosition = 'CenterParent'
     $about.FormBorderStyle = 'FixedDialog'
     $about.MaximizeBox = $false
     $about.MinimizeBox = $false
 
     $lblInfo = [System.Windows.Forms.Label]::new()
-    $lblInfo.Text = "$AppTitle`r`nVersion: $Version`r`nAuthor: $Author"
+    $lblInfo.Text = "$AppTitle`r`nVersion: $Version`r`n`r`nPurpose:`r`nDetect Sage 300 databases and run sequential backups using dbdump32.exe.`r`n`r`nUsage:`r`n1) Configure SQL/runtime/backup settings.`r`n2) Click Detect Databases and select targets.`r`n3) Enter Sage admin credentials and click Start Sequential Backup.`r`n`r`nAuthor: $Author"
     $lblInfo.Location = '20,20'
-    $lblInfo.AutoSize = $true
+    $lblInfo.Size = [System.Drawing.Size]::new(470,150)
     $about.Controls.Add($lblInfo)
+
+    $lblAuthorLink = [System.Windows.Forms.Label]::new()
+    $lblAuthorLink.Text = 'Author GitHub:'
+    $lblAuthorLink.Location = '20,176'
+    $lblAuthorLink.AutoSize = $true
+    $about.Controls.Add($lblAuthorLink)
 
     $link = [System.Windows.Forms.LinkLabel]::new()
     $link.Text = $AuthorUrl
-    $link.Location = '20,100'
+    $link.Location = '112,176'
     $link.AutoSize = $true
     $link.Add_LinkClicked({ Start-Process $AuthorUrl })
     $about.Controls.Add($link)
 
-    $btnClose = [System.Windows.Forms.Button]::new(); $btnClose.Text='Close'; $btnClose.Location='400,160'; $btnClose.Size='80,30'; $btnClose.Add_Click({ $about.Close() }); $about.Controls.Add($btnClose)
+    $btnClose = [System.Windows.Forms.Button]::new(); $btnClose.Text='Close'; $btnClose.Location='400,188'; $btnClose.Size='80,30'; $btnClose.Add_Click({ $about.Close() }); $about.Controls.Add($btnClose)
     [void]$about.ShowDialog($form)
 })
 
