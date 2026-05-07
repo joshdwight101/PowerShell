@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $AppName = 'USB Power Bulk Manager'
-$AppVersion = '1.0.0'
+$AppVersion = '1.1.0'
 $AppAuthor = 'Joshua Dwight'
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -95,51 +95,63 @@ function Set-WakeAllowed {
 
 $form = [UsbPowerBulkGuiFactory]::CreateMainForm("$AppName v$AppVersion | By $AppAuthor")
 
+$menuStrip = New-Object Windows.Forms.MenuStrip
+$fileMenuItem = New-Object Windows.Forms.ToolStripMenuItem('&File')
+$exitMenuItem = New-Object Windows.Forms.ToolStripMenuItem('E&xit')
+$helpMenuItem = New-Object Windows.Forms.ToolStripMenuItem('&Help')
+$aboutMenuItem = New-Object Windows.Forms.ToolStripMenuItem('&About')
+[void]$fileMenuItem.DropDownItems.Add($exitMenuItem)
+[void]$helpMenuItem.DropDownItems.Add($aboutMenuItem)
+[void]$menuStrip.Items.Add($fileMenuItem)
+[void]$menuStrip.Items.Add($helpMenuItem)
+$form.MainMenuStrip = $menuStrip
+$form.Controls.Add($menuStrip)
+
 $banner = New-Object Windows.Forms.Label
-$banner.Location = New-Object Drawing.Point(15,15)
+$banner.Location = New-Object Drawing.Point(15,40)
 $banner.Size = New-Object Drawing.Size(1200,24)
 $banner.Font = New-Object Drawing.Font('Segoe UI',11,[Drawing.FontStyle]::Bold)
 $banner.Text = 'USB bulk power-management controller'
 $form.Controls.Add($banner)
 
 $toggleSelect = New-Object Windows.Forms.Button
-$toggleSelect.Location = New-Object Drawing.Point(15,50)
+$toggleSelect.Location = New-Object Drawing.Point(15,75)
 $toggleSelect.Size = New-Object Drawing.Size(150,32)
 $toggleSelect.Text = 'Select All'
 $form.Controls.Add($toggleSelect)
 
 $refreshBtn = New-Object Windows.Forms.Button
-$refreshBtn.Location = New-Object Drawing.Point(175,50)
+$refreshBtn.Location = New-Object Drawing.Point(175,75)
 $refreshBtn.Size = New-Object Drawing.Size(110,32)
 $refreshBtn.Text = 'Refresh'
 $form.Controls.Add($refreshBtn)
 
 $disableSavingBtn = New-Object Windows.Forms.Button
-$disableSavingBtn.Location = New-Object Drawing.Point(305,50)
+$disableSavingBtn.Location = New-Object Drawing.Point(305,75)
 $disableSavingBtn.Size = New-Object Drawing.Size(220,32)
 $disableSavingBtn.Text = 'Disable Power Saving (Uncheck)'
 $form.Controls.Add($disableSavingBtn)
 
 $enableSavingBtn = New-Object Windows.Forms.Button
-$enableSavingBtn.Location = New-Object Drawing.Point(535,50)
+$enableSavingBtn.Location = New-Object Drawing.Point(535,75)
 $enableSavingBtn.Size = New-Object Drawing.Size(220,32)
 $enableSavingBtn.Text = 'Enable Power Saving (Check)'
 $form.Controls.Add($enableSavingBtn)
 
 $disableWakeBtn = New-Object Windows.Forms.Button
-$disableWakeBtn.Location = New-Object Drawing.Point(765,50)
+$disableWakeBtn.Location = New-Object Drawing.Point(765,75)
 $disableWakeBtn.Size = New-Object Drawing.Size(220,32)
 $disableWakeBtn.Text = 'Disable Wake on USB'
 $form.Controls.Add($disableWakeBtn)
 
 $enableWakeBtn = New-Object Windows.Forms.Button
-$enableWakeBtn.Location = New-Object Drawing.Point(995,50)
+$enableWakeBtn.Location = New-Object Drawing.Point(995,75)
 $enableWakeBtn.Size = New-Object Drawing.Size(220,32)
 $enableWakeBtn.Text = 'Enable Wake on USB'
 $form.Controls.Add($enableWakeBtn)
 
 $grid = New-Object Windows.Forms.DataGridView
-$grid.Location = New-Object Drawing.Point(15,95)
+$grid.Location = New-Object Drawing.Point(15,120)
 $grid.Size = New-Object Drawing.Size(1240,640)
 $grid.AutoGenerateColumns = $false
 $grid.AllowUserToAddRows = $false
@@ -166,13 +178,16 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
     $col.HeaderText = $colName
     $col.DataPropertyName = $colName
     $col.ReadOnly = ($colName -ne 'Selected')
+    if ($colName -eq 'WakeAllowed' -and $col -is [Windows.Forms.DataGridViewCheckBoxColumn]) {
+        $col.ThreeState = $false
+    }
     $grid.Columns.Add($col) | Out-Null
 }
 
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,745)
+$status.Location = New-Object Drawing.Point(15,770)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
@@ -198,10 +213,16 @@ function Refresh-Grid {
     foreach ($device in $script:deviceRows) {
         $rowIndex = $grid.Rows.Add($device.Selected, $device.Name, $device.PnpDeviceId, $device.Status, $device.PowerSavingAllowed, $device.WakeAllowed)
         if (-not $device.WakeToggleSupported) {
-            $wakeCell = $grid.Rows[$rowIndex].Cells['WakeAllowed']
-            $wakeCell.ReadOnly = $true
-            $wakeCell.Style.BackColor = [Drawing.Color]::LightGray
-            $wakeCell.ToolTipText = 'Wake on USB is not supported for this device.'
+            $wakeTextCell = New-Object Windows.Forms.DataGridViewTextBoxCell
+            $wakeTextCell.Value = 'Feature Unavailable for this device.'
+            $wakeTextCell.Style.BackColor = [Drawing.Color]::LightGray
+            $wakeTextCell.Style.ForeColor = [Drawing.Color]::DimGray
+            $wakeTextCell.Style.SelectionBackColor = [Drawing.Color]::LightGray
+            $wakeTextCell.Style.SelectionForeColor = [Drawing.Color]::DimGray
+            $wakeTextCell.Style.Alignment = [Windows.Forms.DataGridViewContentAlignment]::MiddleLeft
+            $wakeTextCell.ToolTipText = 'Feature Unavailable for this device.'
+            $wakeTextCell.ReadOnly = $true
+            $grid.Rows[$rowIndex].Cells['WakeAllowed'] = $wakeTextCell
         }
     }
 
@@ -274,23 +295,12 @@ $grid.add_CurrentCellDirtyStateChanged({
     }
 })
 
-
-$grid.add_CellPainting({
+$grid.add_DataError({
     param($sender, $e)
-    if ($e.RowIndex -lt 0 -or $e.ColumnIndex -lt 0) { return }
-    if ($grid.Columns[$e.ColumnIndex].Name -ne 'WakeAllowed') { return }
-    if ($script:deviceRows[$e.RowIndex].WakeToggleSupported) { return }
-
-    $e.PaintBackground($e.CellBounds, $true)
-    $e.PaintContent($e.CellBounds)
-
-    $pen = New-Object Drawing.Pen([Drawing.Color]::Red, 3)
-    $pad = 4
-    $e.Graphics.DrawLine($pen, $e.CellBounds.Left + $pad, $e.CellBounds.Top + $pad, $e.CellBounds.Right - $pad, $e.CellBounds.Bottom - $pad)
-    $e.Graphics.DrawLine($pen, $e.CellBounds.Right - $pad, $e.CellBounds.Top + $pad, $e.CellBounds.Left + $pad, $e.CellBounds.Bottom - $pad)
-    $pen.Dispose()
-    $e.Handled = $true
+    $e.ThrowException = $false
+    $e.Cancel = $false
 })
+
 
 $grid.add_CellMouseDown({
     param($sender, $e)
@@ -308,6 +318,97 @@ $ctxEnableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllow
 $ctxDisableSaving.add_Click({ Apply-Bulk -Action { param($d) Set-PowerSavingAllowed -PnpDeviceId $d.PnpDeviceId -Allow $false } -ActionName 'Power-saving disable (context)' })
 $ctxEnableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $true } } -ActionName 'Wake enable (context)' })
 $ctxDisableWake.add_Click({ Apply-Bulk -Action { param($d) if ($d.WakeToggleSupported) { Set-WakeAllowed -DeviceName $d.Name -Allow $false } } -ActionName 'Wake disable (context)' })
+
+$exitMenuItem.add_Click({ $form.Close() })
+$aboutMenuItem.add_Click({
+    $about = New-Object Windows.Forms.Form
+    $about.Text = "About $AppName"
+    $about.Size = New-Object Drawing.Size(700,420)
+    $about.StartPosition = [Windows.Forms.FormStartPosition]::CenterParent
+    $about.FormBorderStyle = [Windows.Forms.FormBorderStyle]::FixedDialog
+    $about.MaximizeBox = $false
+    $about.MinimizeBox = $false
+    $about.BackColor = [Drawing.Color]::FromArgb(24,24,28)
+
+    $titleLabel = New-Object Windows.Forms.Label
+    $titleLabel.Text = $AppName
+    $titleLabel.ForeColor = [Drawing.Color]::White
+    $titleLabel.Font = New-Object Drawing.Font('Segoe UI Semibold',18,[Drawing.FontStyle]::Bold)
+    $titleLabel.Location = New-Object Drawing.Point(20,16)
+    $titleLabel.Size = New-Object Drawing.Size(640,40)
+    $about.Controls.Add($titleLabel)
+
+    $versionLabel = New-Object Windows.Forms.Label
+    $versionLabel.Text = "Version $AppVersion"
+    $versionLabel.ForeColor = [Drawing.Color]::FromArgb(130,200,255)
+    $versionLabel.Font = New-Object Drawing.Font('Segoe UI',11,[Drawing.FontStyle]::Regular)
+    $versionLabel.Location = New-Object Drawing.Point(22,55)
+    $versionLabel.Size = New-Object Drawing.Size(300,24)
+    $about.Controls.Add($versionLabel)
+
+    $summaryBox = New-Object Windows.Forms.RichTextBox
+    $summaryBox.ReadOnly = $true
+    $summaryBox.BorderStyle = [Windows.Forms.BorderStyle]::None
+    $summaryBox.BackColor = [Drawing.Color]::FromArgb(32,32,38)
+    $summaryBox.ForeColor = [Drawing.Color]::Gainsboro
+    $summaryBox.Location = New-Object Drawing.Point(20,92)
+    $summaryBox.Size = New-Object Drawing.Size(650,190)
+    $summaryBox.Font = New-Object Drawing.Font('Segoe UI',10)
+    $summaryBox.DetectUrls = $true
+    $summaryBox.Text = @"
+Summary:
+  USB Power Bulk Manager helps administrators quickly review and apply USB power-management settings.
+
+Purpose:
+  Provide a central, bulk-friendly interface for selecting USB devices and changing power saving and wake behavior.
+
+Usage:
+  1. Refresh to load active USB devices.
+  2. Select devices (single, Ctrl+click, or Shift+click).
+  3. Use toolbar buttons or right-click actions to enable/disable settings.
+"@
+    $about.Controls.Add($summaryBox)
+
+    $authorLabel = New-Object Windows.Forms.Label
+    $authorLabel.Text = 'Author'
+    $authorLabel.ForeColor = [Drawing.Color]::WhiteSmoke
+    $authorLabel.Font = New-Object Drawing.Font('Segoe UI Semibold',11,[Drawing.FontStyle]::Bold)
+    $authorLabel.Location = New-Object Drawing.Point(20,294)
+    $authorLabel.Size = New-Object Drawing.Size(120,25)
+    $about.Controls.Add($authorLabel)
+
+    $authorLink = New-Object Windows.Forms.LinkLabel
+    $authorLink.Text = 'Joshua Dwight'
+    $authorLink.LinkColor = [Drawing.Color]::FromArgb(90,170,255)
+    $authorLink.ActiveLinkColor = [Drawing.Color]::FromArgb(130,210,255)
+    $authorLink.VisitedLinkColor = [Drawing.Color]::FromArgb(90,170,255)
+    $authorLink.Font = New-Object Drawing.Font('Segoe UI',11,[Drawing.FontStyle]::Underline)
+    $authorLink.Location = New-Object Drawing.Point(20,320)
+    $authorLink.Size = New-Object Drawing.Size(300,28)
+    $authorLink.Tag = 'https://github.com/joshdwight101'
+    $authorLink.add_LinkClicked({
+        param($sender,$e)
+        Start-Process $sender.Tag
+    })
+    $about.Controls.Add($authorLink)
+
+    $urlLink = New-Object Windows.Forms.LinkLabel
+    $urlLink.Text = 'https://github.com/joshdwight101'
+    $urlLink.LinkColor = [Drawing.Color]::FromArgb(90,170,255)
+    $urlLink.ActiveLinkColor = [Drawing.Color]::FromArgb(130,210,255)
+    $urlLink.VisitedLinkColor = [Drawing.Color]::FromArgb(90,170,255)
+    $urlLink.Font = New-Object Drawing.Font('Consolas',10)
+    $urlLink.Location = New-Object Drawing.Point(20,348)
+    $urlLink.Size = New-Object Drawing.Size(420,24)
+    $urlLink.Tag = 'https://github.com/joshdwight101'
+    $urlLink.add_LinkClicked({
+        param($sender,$e)
+        Start-Process $sender.Tag
+    })
+    $about.Controls.Add($urlLink)
+
+    [void]$about.ShowDialog($form)
+})
 
 $toggleSelect.add_Click({
     $script:allSelected = -not $script:allSelected
