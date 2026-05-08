@@ -28,7 +28,7 @@ public static class UsbPowerBulkGuiFactory
     {
         var form = new Form();
         form.Text = title;
-        form.Size = new Size(1300, 880);
+        form.Size = new Size(1300, 940);
         form.StartPosition = FormStartPosition.CenterScreen;
         return form;
     }
@@ -64,13 +64,37 @@ function Get-UsbDevices {
     $wakeProgrammableDevices = Get-PowerCfgDeviceSet -QueryType 'wake_programmable'
     $wakeDetectionAvailable = (@($wakeProgrammableDevices).Count -gt 0)
 
-    $devices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' -and $_.ConfigManagerErrorCode -eq 0 }
+    $devices = @()
+    try {
+        $devices = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' })
+    } catch {}
+    if ($devices.Count -eq 0) {
+        try {
+            $devices = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -like '*USB*' -or $_.Service -like 'USB*' })
+        } catch {}
+    }
+    if ($devices.Count -eq 0 -and (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue)) {
+        try {
+            $devices = @(
+                Get-PnpDevice -PresentOnly -ErrorAction Stop |
+                    Where-Object { $_.InstanceId -like 'USB*' } |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            Name = $_.FriendlyName
+                            PNPDeviceID = $_.InstanceId
+                            Status = $_.Status
+                        }
+                    }
+            )
+        } catch {}
+    }
+
+    $devices = @($devices | Sort-Object -Property PNPDeviceID -Unique)
     foreach ($d in $devices) {
         $wakeSupported = $wakeDetectionAvailable -and ($wakeProgrammableDevices.Contains($d.Name) -or $wakeProgrammableDevices.Contains($d.PNPDeviceID))
         if (-not $wakeDetectionAvailable) { $wakeSupported = $true }
         $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
         $powerSupported = $powerSavingState.Supported
-        if (-not ($powerSupported -or $wakeSupported)) { continue }
         [pscustomobject]@{
             Selected = $false
             Name = $d.Name
@@ -214,7 +238,7 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,790)
+$status.Location = New-Object Drawing.Point(15,855)
 $status.Size = New-Object Drawing.Size(1240,24)
 $form.Controls.Add($status)
 
