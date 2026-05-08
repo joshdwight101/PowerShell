@@ -32,10 +32,16 @@ $SettingsPath = Join-Path $ScriptRoot 'PSWebDevServ.settings.json'
 $LoggingService = [pscustomobject]@{}
 $LoggingService | Add-Member ScriptMethod Log {
     param([System.Windows.Forms.TextBox]$StatusBox,[string]$Message)
+    $timestamp = (Get-Date -Format 'u')
+    $line = "[$timestamp] $Message" + [Environment]::NewLine
     if ($StatusBox.InvokeRequired) {
-        $StatusBox.Invoke([Action]{ $StatusBox.AppendText("[{0}] {1}{2}" -f (Get-Date -Format 'u'), $Message, [Environment]::NewLine) }) | Out-Null
+        $appendAction = [Action[string]]{
+            param($text)
+            $StatusBox.AppendText($text)
+        }
+        $StatusBox.Invoke($appendAction, @($line)) | Out-Null
     } else {
-        $StatusBox.AppendText("[{0}] {1}{2}" -f (Get-Date -Format 'u'), $Message, [Environment]::NewLine)
+        $StatusBox.AppendText($line)
     }
 }
 
