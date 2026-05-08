@@ -81,8 +81,8 @@ $ProjectManager | Add-Member ScriptMethod Detect {
 $DependencyManager = [pscustomobject]@{}
 $DependencyManager | Add-Member ScriptMethod RuntimeChecks {
     @(
-        @{Name='Node.js';Cmd='node --version'}, @{Name='.NET SDK';Cmd='dotnet --version'}, @{Name='Python';Cmd='python --version'},
-        @{Name='PHP';Cmd='php --version'}, @{Name='Ruby';Cmd='ruby --version'}, @{Name='Git';Cmd='git --version'}
+        @{Name='Node.js';Cmd='node --version';Install='winget install --id OpenJS.NodeJS.LTS -e --accept-source-agreements --accept-package-agreements'}, @{Name='.NET SDK';Cmd='dotnet --version';Install='winget install --id Microsoft.DotNet.SDK.10 -e --accept-source-agreements --accept-package-agreements'}, @{Name='Python';Cmd='python --version';Install='winget install --id Python.Python.3.12 -e --accept-source-agreements --accept-package-agreements'},
+        @{Name='PHP';Cmd='php --version';Install='winget install --id PHP.PHP -e --accept-source-agreements --accept-package-agreements'}, @{Name='Ruby';Cmd='ruby --version';Install='winget install --id RubyInstallerTeam.RubyWithDevKit.3.2 -e --accept-source-agreements --accept-package-agreements'}, @{Name='Git';Cmd='git --version';Install='winget install --id Git.Git -e --accept-source-agreements --accept-package-agreements'}
     )
 }
 
@@ -131,8 +131,7 @@ $chkBrowser=New-Object Windows.Forms.CheckBox -Property @{ Text='Auto-launch bro
 $chkRestart=New-Object Windows.Forms.CheckBox -Property @{ Text='Auto-restart when project path changes'; Checked=[bool]$settings.AutoRestartOnProjectChange; Width=380 }
 $txtStart=New-Object Windows.Forms.TextBox -Property @{ Width=800; Text=[string]$settings.ServerStartCommand }
 $txtStop=New-Object Windows.Forms.TextBox -Property @{ Width=800; Text=[string]$settings.ServerStopCommand }
-$link=New-Object Windows.Forms.LinkLabel -Property @{ Text="$($App.Author) ($($App.AuthorUrl))"; Width=600 }; $link.Links.Add(0,$link.Text.Length,$App.AuthorUrl)|Out-Null
-$setup.Controls.AddRange(@((New-Object Windows.Forms.Label -Property @{Text='Project Root';Width=300}),$txtProject,$btnBrowse,(New-Object Windows.Forms.Label -Property @{Text='Runtime';Width=300}),$cmbRuntime,(New-Object Windows.Forms.Label -Property @{Text='LocalHost URL';Width=300}),$txtHost,$chkBrowser,$chkRestart,(New-Object Windows.Forms.Label -Property @{Text='Start Command';Width=300}),$txtStart,(New-Object Windows.Forms.Label -Property @{Text='Stop Command';Width=300}),$txtStop,$link))
+$setup.Controls.AddRange(@((New-Object Windows.Forms.Label -Property @{Text='Project Root';Width=300}),$txtProject,$btnBrowse,(New-Object Windows.Forms.Label -Property @{Text='Runtime';Width=300}),$cmbRuntime,(New-Object Windows.Forms.Label -Property @{Text='LocalHost URL';Width=300}),$txtHost,$chkBrowser,$chkRestart,(New-Object Windows.Forms.Label -Property @{Text='Start Command';Width=300}),$txtStart,(New-Object Windows.Forms.Label -Property @{Text='Stop Command';Width=300}),$txtStop))
 
 $dbPanel=New-Object Windows.Forms.FlowLayoutPanel -Property @{ Dock='Fill'; FlowDirection='TopDown'; WrapContents=$false; AutoScroll=$true }; $tabDb.Controls.Add($dbPanel)
 $chkSqlite=New-Object Windows.Forms.CheckBox -Property @{ Text='Enable offline SQLite bridge'; Checked=[bool]$settings.UseOfflineSQLiteBridge; Width=320 }
@@ -189,7 +188,6 @@ $btnBrowse.Add_Click({
     }
 })
 
-$link.Add_LinkClicked({ param($s,$e) Start-Process $e.Link.LinkData })
 $mAbout.Add_Click({ [Windows.Forms.MessageBox]::Show("$($App.Name)`nVersion: $($App.Version)`nPurpose: $($App.Purpose)`nAuthor: $($App.Author)`n$($App.AuthorUrl)","About $($App.Name)")|Out-Null })
 $mExit.Add_Click({ $ServerManager.Stop($settings,$statusBox); $SettingsManager.Save($settings); $form.Close() })
 $btnStart.Add_Click({ $ServerManager.Start($settings,$statusBox) })
@@ -206,14 +204,22 @@ $worker.add_DoWork({
     param($sender,$e)
     $ctx = $e.Argument
     $steps = @()
-    foreach($r in $DependencyManager.RuntimeChecks()) { $steps += @{Name="Check $($r.Name)"; Cmd=$r.Cmd; Dir=$ctx.Project} }
+    foreach($r in $DependencyManager.RuntimeChecks()) {
+        $steps += @{Name="Check $($r.Name)"; Cmd=$r.Cmd; Dir=$ctx.Project; OptionalInstall=$r.Install}
+    }
     $det = $ProjectManager.Detect($ctx.Project)
     if($det){ $steps += @{Name="Install project dependencies ($($det.Runtime))"; Cmd=$det.Install; Dir=$ctx.Project} }
     $count = [Math]::Max($steps.Count,1)
     for($i=0;$i -lt $steps.Count;$i++){
         $s = $steps[$i]; $ok=$true; $msg='OK'
         try { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $s.Cmd -WorkingDirectory $s.Dir -Wait -WindowStyle Hidden | Out-Null }
-        catch { $ok=$false; $msg=$_.Exception.Message }
+        catch {
+            $ok=$false; $msg=$_.Exception.Message
+            if($s.OptionalInstall){
+                try { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', $s.OptionalInstall -WorkingDirectory $s.Dir -Wait -WindowStyle Hidden | Out-Null; $ok=$true; $msg='Installed via winget' }
+                catch { $msg = "$msg | Install failed: $($_.Exception.Message)" }
+            }
+        }
         $pct = [int](($i+1)/$count*100)
         $sender.ReportProgress($pct, [pscustomobject]@{Step=$s.Name;Success=$ok;Message=$msg})
     }
