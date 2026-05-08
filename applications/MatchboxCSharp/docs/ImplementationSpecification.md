@@ -101,3 +101,8 @@
   - `ViewModels/MainWindowViewModel.cs` for async command orchestration + dispatcher updates.
   - `Services/DotnetExecutionService.cs` for PowerShell wrapper invocation and cancellation.
   - `backend/Matchbox.Backend.psm1` for command mapping + argument builder.
+
+## 13) Dual Implementation Strategy (PowerShell + C#)
+- **PowerShell-first app**: `powershell/MatchboxCSharp.ps1` runs the full WPF shell, menu system, build options, and execution console directly from PowerShell.
+- **C# app parity**: `src/MatchboxCSharp.App` mirrors the same UI regions, commands, and backend command mapping for equivalent operator workflow.
+- **Shared backend**: both modes consume `backend/Matchbox.Backend.psm1` to keep command construction and execution policy consistent.
