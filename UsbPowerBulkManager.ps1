@@ -1,17 +1,18 @@
-<#
-.SYNOPSIS
-USB Power Bulk Manager (v1.1.1)
-
-.DESCRIPTION
-WinForms utility for bulk USB power-management administration with capability-aware controls,
-search filtering, multi-select workflows, context-menu actions, and an About dialog.
-#>
+# +------------------------------------------------------------+
+# | Author : Joshua Dwight                                     |
+# | Github : https://github.com/joshdwight101                  |
+# +------------------------------------------------------------+
+#
+# Author Information:
+# Joshua Dwight
+# https://github.com/joshdwight101
+# https://linkedin.com/in/dwightj
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $AppName = 'USB Power Bulk Manager'
-$AppVersion = '1.1.1'
+$AppVersion = '1.2.0'
 $AppAuthor = 'Joshua Dwight'
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -28,7 +29,7 @@ public static class UsbPowerBulkGuiFactory
     {
         var form = new Form();
         form.Text = title;
-        form.Size = new Size(1300, 880);
+        form.Size = new Size(1300, 940);
         form.StartPosition = FormStartPosition.CenterScreen;
         return form;
     }
@@ -59,18 +60,75 @@ function Get-PowerCfgDeviceSet {
     return $results
 }
 
+function Convert-NormalizedDeviceKey {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    return (($Value -replace '[^a-zA-Z0-9]','').ToUpperInvariant())
+}
+
+function Get-WmiCapabilitySet {
+    param([string]$ClassName)
+    $set = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    try {
+        $instances = Get-CimInstance -Namespace root/wmi -ClassName $ClassName -ErrorAction Stop
+        foreach ($inst in $instances) {
+            if ($null -eq $inst.InstanceName) { continue }
+            [void]$set.Add((Convert-NormalizedDeviceKey -Value $inst.InstanceName))
+        }
+    } catch {}
+    return $set
+}
+
+function Test-WmiCapabilitySupport {
+    param(
+        [string]$PnpDeviceId,
+        [System.Collections.Generic.HashSet[string]]$CapabilitySet
+    )
+    if ($null -eq $CapabilitySet -or $CapabilitySet.Count -eq 0) { return $false }
+    $deviceKey = Convert-NormalizedDeviceKey -Value $PnpDeviceId
+    foreach ($cap in $CapabilitySet) {
+        if ($cap.Contains($deviceKey)) { return $true }
+    }
+    return $false
+}
+
 function Get-UsbDevices {
     $wakeArmedDevices = Get-PowerCfgDeviceSet -QueryType 'wake_armed'
-    $wakeProgrammableDevices = Get-PowerCfgDeviceSet -QueryType 'wake_programmable'
-    $wakeDetectionAvailable = (@($wakeProgrammableDevices).Count -gt 0)
+    $powerEnableSet = Get-WmiCapabilitySet -ClassName 'MSPower_DeviceEnable'
+    $wakeEnableSet = Get-WmiCapabilitySet -ClassName 'MSPower_DeviceWakeEnable'
 
-    $devices = Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' -and $_.ConfigManagerErrorCode -eq 0 }
+    $devices = @()
+    try {
+        $devices = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.PNPDeviceID -like 'USB*' })
+    } catch {}
+    if ($devices.Count -eq 0) {
+        try {
+            $devices = @(Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -like '*USB*' -or $_.Service -like 'USB*' })
+        } catch {}
+    }
+    if ($devices.Count -eq 0 -and (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue)) {
+        try {
+            $devices = @(
+                Get-PnpDevice -PresentOnly -ErrorAction Stop |
+                    Where-Object { $_.InstanceId -like 'USB*' } |
+                    ForEach-Object {
+                        [pscustomobject]@{
+                            Name = $_.FriendlyName
+                            PNPDeviceID = $_.InstanceId
+                            Status = $_.Status
+                        }
+                    }
+            )
+        } catch {}
+    }
+
+    $devices = @($devices | Sort-Object -Property PNPDeviceID -Unique)
     foreach ($d in $devices) {
-        $wakeSupported = $wakeDetectionAvailable -and ($wakeProgrammableDevices.Contains($d.Name) -or $wakeProgrammableDevices.Contains($d.PNPDeviceID))
-        if (-not $wakeDetectionAvailable) { $wakeSupported = $true }
-        $powerSavingState = Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID
-        $powerSupported = $powerSavingState.Supported
+        $powerSupported = Test-WmiCapabilitySupport -PnpDeviceId $d.PNPDeviceID -CapabilitySet $powerEnableSet
+        $wakeSupported = Test-WmiCapabilitySupport -PnpDeviceId $d.PNPDeviceID -CapabilitySet $wakeEnableSet
         if (-not ($powerSupported -or $wakeSupported)) { continue }
+
+        $powerSavingState = if ($powerSupported) { Get-PowerSavingState -PnpDeviceId $d.PNPDeviceID } else { @{ Supported = $false; Allowed = $false } }
         [pscustomobject]@{
             Selected = $false
             Name = $d.Name
@@ -78,7 +136,7 @@ function Get-UsbDevices {
             Status = $d.Status
             PowerSavingAllowed = $powerSavingState.Allowed
             PowerSavingToggleSupported = $powerSupported
-            WakeAllowed = ($wakeSupported -and $wakeArmedDevices.Contains($d.Name))
+            WakeAllowed = ($wakeSupported -and ($wakeArmedDevices.Contains($d.Name) -or $wakeArmedDevices.Contains($d.PNPDeviceID)))
             WakeToggleSupported = $wakeSupported
         }
     }
@@ -169,11 +227,13 @@ $searchLabel = New-Object Windows.Forms.Label
 $searchLabel.Location = New-Object Drawing.Point(305,82)
 $searchLabel.Size = New-Object Drawing.Size(70,24)
 $searchLabel.Text = 'Search:'
+$searchLabel.Anchor = [Windows.Forms.AnchorStyles]::Top -bor [Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($searchLabel)
 
 $searchBox = New-Object Windows.Forms.TextBox
 $searchBox.Location = New-Object Drawing.Point(370,78)
 $searchBox.Size = New-Object Drawing.Size(360,30)
+$searchBox.Anchor = [Windows.Forms.AnchorStyles]::Top -bor [Windows.Forms.AnchorStyles]::Right
 $form.Controls.Add($searchBox)
 
 $grid = New-Object Windows.Forms.DataGridView
@@ -188,6 +248,7 @@ $grid.SelectionMode = 'FullRowSelect'
 $grid.MultiSelect = $true
 $grid.RowHeadersVisible = $false
 $grid.ScrollBars = [Windows.Forms.ScrollBars]::Both
+$grid.Anchor = [Windows.Forms.AnchorStyles]::Top -bor [Windows.Forms.AnchorStyles]::Bottom -bor [Windows.Forms.AnchorStyles]::Left -bor [Windows.Forms.AnchorStyles]::Right
 
 $selectedCol = New-Object Windows.Forms.DataGridViewCheckBoxColumn
 $selectedCol.Name = 'Selected'
@@ -214,8 +275,9 @@ foreach ($colName in @('Name','PnpDeviceId','Status','PowerSavingAllowed','WakeA
 $form.Controls.Add($grid)
 
 $status = New-Object Windows.Forms.Label
-$status.Location = New-Object Drawing.Point(15,790)
+$status.Location = New-Object Drawing.Point(15,855)
 $status.Size = New-Object Drawing.Size(1240,24)
+$status.Anchor = [Windows.Forms.AnchorStyles]::Bottom -bor [Windows.Forms.AnchorStyles]::Left
 $form.Controls.Add($status)
 
 

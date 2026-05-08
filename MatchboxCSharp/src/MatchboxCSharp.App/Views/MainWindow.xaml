@@ -1,0 +1,97 @@
+<Window x:Class="MatchboxCSharp.App.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="{Binding WindowTitle}"
+        MinWidth="1100"
+        MinHeight="700">
+    <DockPanel LastChildFill="True">
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Exit" Command="{Binding ExitCommand}"/>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_Manual" Command="{Binding OpenManualCommand}"/>
+                <MenuItem Header="_About" Command="{Binding OpenAboutCommand}"/>
+            </MenuItem>
+        </Menu>
+
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem Content="{Binding StatusMessage}" />
+        </StatusBar>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*"/>
+                <ColumnDefinition Width="2*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <GroupBox Header="Build Options" Grid.Row="0" Grid.Column="0" Margin="8">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Configuration" Grid.Row="0" Grid.Column="0" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Configurations}" SelectedItem="{Binding SelectedConfiguration}" Margin="0,0,16,8"/>
+                    <TextBlock Text="Framework" Grid.Row="0" Grid.Column="2" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="0" Grid.Column="3" ItemsSource="{Binding Frameworks}" SelectedItem="{Binding SelectedFramework}" Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Runtime" Grid.Row="1" Grid.Column="0" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Runtimes}" SelectedItem="{Binding SelectedRuntime}" Margin="0,0,16,8"/>
+                    <TextBlock Text="Output Path" Grid.Row="1" Grid.Column="2" Margin="0,0,8,8" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding OutputPath}" Margin="0,0,0,8"/>
+
+                    <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="4" Orientation="Horizontal">
+                        <CheckBox Content="Single-file publish" IsChecked="{Binding PublishSingleFile}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Self-contained" IsChecked="{Binding SelfContained}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Debug mode" IsChecked="{Binding DebugMode}"/>
+                    </StackPanel>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="Execution Console" Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="8">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
+                        <Button Content="Build" Command="{Binding BuildCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Run" Command="{Binding RunCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Test" Command="{Binding TestCommand}" Margin="0,0,8,0"/>
+                        <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+                    </StackPanel>
+                    <TextBox Grid.Row="1" Text="{Binding ConsoleText}" IsReadOnly="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" FontFamily="Consolas"/>
+                </Grid>
+            </GroupBox>
+
+            <GroupBox Header="Project + Arguments" Grid.Row="1" Grid.Column="0" Margin="8">
+                <Grid Margin="8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Project/Solution Path"/>
+                    <TextBox Grid.Row="1" Text="{Binding ProjectPath}" Margin="0,6,0,8"/>
+                    <TextBox Grid.Row="2" Text="{Binding CustomArguments}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap"/>
+                </Grid>
+            </GroupBox>
+        </Grid>
+    </DockPanel>
+</Window>
