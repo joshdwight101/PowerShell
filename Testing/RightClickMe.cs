@@ -1,55 +1,58 @@
-# RightClickMe - The Context Menu Builder
-# Author: Joshua Dwight
-# Version: 1.0.8
-# Description: PowerShell + C# Hybrid App to manage Windows 11/10 Context Menus
-
-[CmdletBinding()]
-param (
-    [switch]$DebugMode
-)
-
-$LogFile = "$env:TEMP\RightClickMe_Debug.log"
-function Write-Log($Message) {
-    if ($DebugMode) {
-        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        $logEntry = "[$timestamp] $Message"
-        Write-Host -ForegroundColor Cyan $logEntry
-        Add-Content -Path $LogFile -Value $logEntry
-    }
-}
-
-if ($DebugMode) { 
-    Clear-Content -Path $LogFile -ErrorAction SilentlyContinue
-    Write-Log "Initializing RightClickMe App (v1.0.6) Debug Mode..." 
-}
-
-# --- Self-Elevation Check ---
-$isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isElevated) {
-    Write-Log "Not elevated. Requesting Administrator privileges..."
-    $argList = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-    if ($DebugMode) { $argList += " -DebugMode" }
-    Start-Process powershell.exe -ArgumentList $argList -Verb RunAs
-    exit
-}
-
-Write-Log "Elevation verified. Proceeding with application execution..."
-
-# --- C# Source Code for the Application ---
-$AppSessionId = (New-Guid).Guid.Replace("-", "")
-Write-Log "Generated unique AppSessionId: $AppSessionId"
-
-$RightClickMeCode = @"
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Security.Principal;
+using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
-using System.Web.Script.Serialization;
-using System.IO;
 
-namespace RightClickMeApp_$AppSessionId
+namespace RightClickMeApp
 {
+    // --- Application Entry Point ---
+    public static class Program
+    {
+        [STAThread]
+        public static void Main(string[] args)
+        {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            // --- Self-Elevation Check ---
+            bool isElevated;
+            using (WindowsIdentity identity = WindowsIdentity.GetCurrent())
+            {
+                WindowsPrincipal principal = new WindowsPrincipal(identity);
+                isElevated = principal.IsInRole(WindowsBuiltInRole.Administrator);
+            }
+
+            if (!isElevated)
+            {
+                ProcessStartInfo startInfo = new ProcessStartInfo
+                {
+                    UseShellExecute = true,
+                    WorkingDirectory = Environment.CurrentDirectory,
+                    FileName = Application.ExecutablePath,
+                    Verb = "runas" // Triggers UAC prompt
+                };
+                
+                try 
+                { 
+                    Process.Start(startInfo); 
+                } 
+                catch 
+                { 
+                    // User cancelled the UAC prompt
+                    MessageBox.Show("Administrator privileges are required to modify the Context Menu registry.", "Elevation Required", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
+            Application.Run(new MainForm());
+        }
+    }
+
     // --- Data Models ---
     public class MenuItemData
     {
@@ -105,7 +108,6 @@ namespace RightClickMeApp_$AppSessionId
             }
             catch (Exception ex)
             {
-                // Unhandled UI Exception Catcher
                 MessageBox.Show("Fatal Error in InitializeComponent:\n" + ex.Message + "\n\nStackTrace:\n" + ex.StackTrace, "Debug Crash Handler", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Environment.Exit(1);
             }
@@ -138,12 +140,8 @@ namespace RightClickMeApp_$AppSessionId
 
             // --- Main Split Container ---
             SplitContainer split = new SplitContainer();
-            
-            // CRITICAL FIX: Force an initial width BEFORE setting constraints to prevent the 0px .ctor bounds crash.
             split.Width = 1000;
             split.Height = 600;
-            
-            // Now apply settings safely
             split.Panel1MinSize = 250;
             split.Panel2MinSize = 400;
             split.SplitterDistance = 350;
@@ -224,7 +222,6 @@ namespace RightClickMeApp_$AppSessionId
             flpActions.Controls.Add(btnDelete);
             gbActions.Controls.Add(flpActions);
             
-            // Add Actions first, then Props, so Props docks to the very top.
             rightPanel.Controls.Add(gbActions);
             rightPanel.Controls.Add(gbProps);
 
@@ -251,7 +248,6 @@ namespace RightClickMeApp_$AppSessionId
             bottomPanel.Controls.Add(btnApply);
             
             tabBuilder.Controls.Add(bottomPanel);
-            
             split.Panel2.Controls.Add(rightPanel);
             
             // --- Template Manager Setup ---
@@ -305,7 +301,7 @@ namespace RightClickMeApp_$AppSessionId
                              "4. RUN AS ADMINISTRATOR\r\n" +
                              "Checking this box forces the command to prompt for UAC elevation before running.\r\n" +
                              "A shield icon will automatically appear next to your context menu item.\r\n\r\n" +
-                             "5. TEMPLATE MANAGER (NEW)\r\n" +
+                             "5. TEMPLATE MANAGER\r\n" +
                              "You can save your current menu configurations as templates in the 'Template Manager' tab.\r\n" +
                              "This allows you to quickly switch between different toolsets without relying on manual JSON exports.\r\n\r\n" +
                              "6. EXPORT / IMPORT\r\n" +
@@ -743,35 +739,4 @@ namespace RightClickMeApp_$AppSessionId
             }
         }
     }
-}
-"@
-
-# Load Required Assemblies
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-Add-Type -AssemblyName System.Web.Extensions # Required for JavaScriptSerializer (JSON)
-
-# Compile and Run
-try {
-    Write-Log "Compiling C# Source Code via Add-Type..."
-    Add-Type -TypeDefinition $RightClickMeCode -ReferencedAssemblies System.Windows.Forms, System.Drawing, System.Web.Extensions, mscorlib -ErrorAction Stop
-    
-    Write-Log "Enabling Visual Styles and initializing MainForm..."
-    [System.Windows.Forms.Application]::EnableVisualStyles()
-    $form = New-Object RightClickMeApp_$AppSessionId.MainForm
-    
-    Write-Log "Starting Application Message Loop..."
-    [System.Windows.Forms.Application]::Run($form)
-    Write-Log "Application closed normally."
-}
-catch {
-    Write-Log "CRITICAL ERROR: Failed to compile or run the application."
-    Write-Log $_.Exception.Message
-    if ($DebugMode) {
-        Write-Log $_.ScriptStackTrace
-        Write-Log $_.Exception.StackTrace
-    }
-    Write-Error "Failed to compile or run the application."
-    Write-Error $_.Exception.Message
-    Pause
 }
